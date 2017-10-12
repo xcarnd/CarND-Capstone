@@ -1,0 +1,273 @@
+#!/usr/bin/env python
+
+import rospy
+import math
+import tf
+import numpy as np
+from visualization_msgs.msg import Marker, MarkerArray
+from std_msgs.msg import Header
+from geometry_msgs.msg import Point, Quaternion, PoseStamped
+from styx_msgs.msg import Lane, Waypoint
+from nav_msgs.msg import Path
+
+class Viz(object):
+    def __init__(self):
+        rospy.init_node('viz')
+        
+        # storage for all the waypoints
+        self.all_ref_waypoints = []
+
+        self.current_pose = None
+
+        # storing current path
+        self.current_path = None
+
+        # remember waypoints index behind and ahead of the last
+        # current_pose, so for the next round we can save the time for
+        # looking
+        self.pose_ref_waypoints_idx = None
+
+        rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb, queue_size=1)
+        rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb, queue_size=1)
+        rospy.Subscriber('/final_waypoints', Lane, self.final_waypoints_cb, queue_size=1)
+
+        self.viz_current_pub = rospy.Publisher('viz_current_pose', PoseStamped, queue_size=1)
+        self.viz_waypoints_around_pub = rospy.Publisher('viz_waypoints_around', MarkerArray, queue_size=1)
+        self.viz_current_path_pub = rospy.Publisher('viz_current_path', Path, queue_size=1)
+
+        # FIXME: publisher for /final_waypoints_alt. no needed once waypoint updater is completed.
+        self.final_waypoints_alt_pub = rospy.Publisher('final_waypoints_alt', Lane, queue_size=1)
+
+        rate = rospy.Rate(30)
+        while not rospy.is_shutdown():
+            self.publish_current()
+            self.publish_waypoints_around()
+            self.publish_current_path()
+            rate.sleep()
+
+    def final_waypoints_cb(self, msg):
+        current_path = Path()
+        current_path.header = Header()
+        current_path.header.stamp = rospy.Time.now()
+        current_path.header.frame_id = "/world"
+        current_path.poses = []
+        waypoints = msg.waypoints
+        # thresholding the number of final waypoints
+        waypoints_thresh = 50
+        counter = 0
+        for wp in waypoints:
+            position = wp.pose.pose.position
+            orientation = wp.pose.pose.orientation
+            current_path.poses.append(
+                self.get_pose_stamped(position, orientation))
+            counter += 1
+            if counter > waypoints_thresh:
+                break
+        self.current_path = current_path
+
+    def pose_cb(self, msg):
+        self.current_pose = msg
+
+        num_all_ref_waypoints = len(self.all_ref_waypoints)
+        # wait for /base_waypoints message if necessary
+        if num_all_ref_waypoints == 0:
+            return
+        # reference waypoints array initialized.
+
+        # looking for reference waypoints for current pose, use
+        # previous reference waypoints if available
+
+        # a reasonable maximum distance between the current pose and
+        # reference waypoints.
+        MAX_DIST = 300
+        i = 0
+        if self.pose_ref_waypoints_idx is not None:
+            i = self.pose_ref_waypoints_idx[0]
+
+        checked = 0
+        while True:
+            checked += 1
+            # prevent from dead looping
+            if checked > num_all_ref_waypoints:
+                self.pose_ref_waypoints_idx = None
+                return
+            
+            # looping
+            if i >= num_all_ref_waypoints:
+                i -= self.all_ref_waypoints
+                
+            if self.dist(msg, self.all_ref_waypoints[i]) > MAX_DIST:
+                i += 1
+                continue
+            # calculate vectors for waypoint orientation and the
+            # direction from waypoint to pose, if the absolute angle
+            # between them is greater than 90 degrees, the waypoint is
+            # ahead of current pose
+            ref_wp_quaternion = [self.all_ref_waypoints[i].pose.pose.orientation.x,
+                                 self.all_ref_waypoints[i].pose.pose.orientation.y,
+                                 self.all_ref_waypoints[i].pose.pose.orientation.z,
+                                 self.all_ref_waypoints[i].pose.pose.orientation.w]
+            wp_orient_quaternion = tf.transformations.quaternion_multiply(
+                tf.transformations.quaternion_multiply(
+                    ref_wp_quaternion,
+                    [1, 0, 0, 0]),
+                tf.transformations.quaternion_inverse(
+                    ref_wp_quaternion))
+            wp_orient = np.array([wp_orient_quaternion[0],
+                                  wp_orient_quaternion[1],
+                                  wp_orient_quaternion[2]])
+            direct = np.array([msg.pose.position.x - self.all_ref_waypoints[i].pose.pose.position.x,
+                               msg.pose.position.y - self.all_ref_waypoints[i].pose.pose.position.y,
+                               0]) # z component ignored
+ 
+            cos_theta = np.dot(wp_orient, direct) / \
+                        (np.linalg.norm(wp_orient) * np.linalg.norm(direct))
+            if cos_theta > 0:
+                i += 1
+            else:
+                # we've found one
+                ahead = i
+                behind = ahead - 1
+                if behind == -1:
+                    behind = num_all_ref_waypoints - 1
+                self.pose_ref_waypoints_idx = (behind, ahead)
+                break
+        # FIXME: publishing 200 waypoints ahead of the current
+        # waypoint, which can be used as an alt for the waypoints of
+        # /final_waypoints message. Once waypoint updater (either
+        # partial or full) is completed, these codes can be removed.
+        if self.pose_ref_waypoints_idx is not None:
+            final_waypoints_alt = Lane()
+            final_waypoints_alt.header = Header()
+            final_waypoints_alt.header.stamp = rospy.Time.now()
+            final_waypoints_alt.header.frame_id = "/world"
+            final_waypoints_alt.waypoints = []
+            
+            idx_ahead = self.pose_ref_waypoints_idx[1]
+            i = 0
+            while i < 200:
+                idx = idx_ahead + i
+                if idx >= num_all_ref_waypoints:
+                    idx -= num_all_ref_waypoints
+                ref_waypoint = self.all_ref_waypoints[idx]
+                
+                alt_waypoint = Waypoint()
+
+                alt_waypoint.pose = self.get_pose_stamped(ref_waypoint.pose.pose.position,
+                                                          ref_waypoint.pose.pose.orientation)
+                # twist stamped is not needed to construct a path, so
+                # leave them as empty (0)
+                alt_waypoint.twist.header = Header()
+                alt_waypoint.twist.header.stamp = rospy.Time.now()
+                alt_waypoint.twist.header.frame_id = "/world"
+
+                final_waypoints_alt.waypoints.append(alt_waypoint)
+                i += 1
+            self.final_waypoints_alt_pub.publish(final_waypoints_alt)
+
+    def publish_current_path(self):
+        if self.current_path is None:
+            return
+
+        self.viz_current_path_pub.publish(self.current_path)
+
+    def publish_current(self):
+        if self.current_pose is None:
+            return
+        
+        msg_copy = PoseStamped()
+        msg_copy.header = Header()
+        msg_copy.header.stamp = rospy.Time.now()
+        msg_copy.header.frame_id = "/world"
+        
+        msg_copy.pose.position.x = self.current_pose.pose.position.x
+        msg_copy.pose.position.y = self.current_pose.pose.position.y
+        msg_copy.pose.position.z = self.current_pose.pose.position.z
+
+        msg_copy.pose.orientation.x = self.current_pose.pose.orientation.x
+        msg_copy.pose.orientation.y = self.current_pose.pose.orientation.y
+        msg_copy.pose.orientation.z = self.current_pose.pose.orientation.z
+        msg_copy.pose.orientation.w = self.current_pose.pose.orientation.w
+                
+        self.viz_current_pub.publish(msg_copy)
+
+    def publish_waypoints_around(self):
+        """Visualizing reference waypoints by publishing visualization_msgs/MarkerArray."""
+        if self.pose_ref_waypoints_idx is None:
+            return
+
+        # visualizing +/- 5 waypoints around the reference waypoints.
+        num = 5
+        msg = MarkerArray()
+        msg.markers = []
+        idx = -num
+
+        wp_types = ['behind', 'ahead']
+        # waypoints behind
+        for t in wp_types:
+            if t == 'behind':
+                r = range(num, -1, -1)
+            else:
+                r = range(num + 1)
+                
+            for i in r:
+                if t == 'behind':
+                    wp = self.all_ref_waypoints[self.pose_ref_waypoints_idx[0] - i]
+                else:
+                    wp = self.all_ref_waypoints[self.pose_ref_waypoints_idx[1] + i]
+                    
+                marker_msg = Marker()
+                marker_msg.header = Header()
+                marker_msg.header.stamp = rospy.Time.now()
+                marker_msg.header.frame_id = "/world"
+                marker_msg.ns = "/waypoints_viz"
+                marker_msg.id = idx
+                marker_msg.type = Marker.SPHERE
+                marker_msg.action = Marker.ADD # or MODIFY. Both are 0
+                
+                # marker pose, scale and color
+                marker_msg.pose.position.x = wp.pose.pose.position.x
+                marker_msg.pose.position.y = wp.pose.pose.position.y
+                marker_msg.pose.position.z = wp.pose.pose.position.z
+                
+                marker_msg.scale.x = 0.1
+                marker_msg.scale.y = 0.1
+                marker_msg.scale.z = 0.1
+                
+                marker_msg.color.r = 0.0
+                marker_msg.color.g = 1.0
+                marker_msg.color.b = 0.0
+                marker_msg.color.a = 1.0
+
+                msg.markers.append(marker_msg)
+                
+                idx += 1
+        self.viz_waypoints_around_pub.publish(msg)
+            
+    def dist(self, pose, wp):
+        a = pose.pose.position
+        b = wp.pose.pose.position
+        return math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2 + (a.z - b.z) ** 2)
+
+    def waypoints_cb(self, waypoints):
+        self.all_ref_waypoints = []
+        waypoints = waypoints.waypoints
+        for waypoint in waypoints:
+            self.all_ref_waypoints.append(waypoint)
+        print("Base waypoints received")
+
+    def get_pose_stamped(self, position, orientation):
+        msg = PoseStamped()
+        msg.header = Header()
+        msg.header.stamp = rospy.Time.now()
+        msg.header.frame_id = "/world"
+
+        msg.pose.position = Point(position.x, position.y, position.z)
+        msg.pose.orientation = Quaternion(orientation.x, orientation.y, orientation.z, orientation.w)
+        return msg
+
+if __name__ == '__main__':
+    try:
+        Viz()
+    except rospy.ROSInterruptException:
+        pass

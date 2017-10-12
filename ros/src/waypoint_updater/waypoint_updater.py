@@ -38,7 +38,15 @@ class WaypointUpdater(object):
 
         # TODO: Add other member variables you need below
 
+        # FIXME: use /final_waypoints_alt as /final_waypoints if that topic is available
+        # remove it once waypoint updater is done.
+        rospy.Subscriber('/final_waypoints_alt', Lane, self.final_waypoints_alt_cb)
+
         rospy.spin()
+        
+    # FIXME: remove when waypoint updater is done
+    def final_waypoints_alt_cb(self, msg):
+        self.final_waypoints_pub.publish(msg)
 
     def pose_cb(self, msg):
         # TODO: Implement
