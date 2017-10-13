@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+  <node pkg="waypoint_locator" type="waypoint_locator" name="waypoint_locator" output="screen" />
+</launch>

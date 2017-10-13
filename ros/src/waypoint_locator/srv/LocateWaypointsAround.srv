@@ -1,0 +1,11 @@
+# the pose to be located
+geometry_msgs/Pose pose
+---
+# nearest waypoint index
+int32 nearest
+# waypoint index for waypoint behind `pose`. will be -1 if
+# unable to locate
+int32 behind
+# waypoint index for waypoint ahead `pose`. will be -1 if
+# unable to locate
+int32 ahead
