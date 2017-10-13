@@ -9,6 +9,7 @@ from std_msgs.msg import Header
 from geometry_msgs.msg import Point, Quaternion, PoseStamped
 from styx_msgs.msg import Lane, Waypoint
 from nav_msgs.msg import Path
+from waypoint_locator.srv import *
 
 class Viz(object):
     def __init__(self):
@@ -27,6 +28,8 @@ class Viz(object):
         # looking
         self.pose_ref_waypoints_idx = None
 
+        self.locate_waypoints_around = rospy.ServiceProxy('/waypoint_locator/locate_waypoints_around', LocateWaypointsAround)
+
         rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb, queue_size=1)
         rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb, queue_size=1)
         rospy.Subscriber('/final_waypoints', Lane, self.final_waypoints_cb, queue_size=1)
@@ -38,11 +41,14 @@ class Viz(object):
         # FIXME: publisher for /final_waypoints_alt. no needed once waypoint updater is completed.
         self.final_waypoints_alt_pub = rospy.Publisher('final_waypoints_alt', Lane, queue_size=1)
 
+        rospy.wait_for_service('/waypoint_locator/locate_waypoints_around')
+
         rate = rospy.Rate(30)
         while not rospy.is_shutdown():
-            self.publish_current()
-            self.publish_waypoints_around()
-            self.publish_current_path()
+            if len(self.all_ref_waypoints) > 0:
+                self.publish_current()
+                self.publish_waypoints_around()
+                self.publish_current_path()
             rate.sleep()
 
     def final_waypoints_cb(self, msg):
@@ -68,75 +74,19 @@ class Viz(object):
     def pose_cb(self, msg):
         self.current_pose = msg
 
-        num_all_ref_waypoints = len(self.all_ref_waypoints)
-        # wait for /base_waypoints message if necessary
-        if num_all_ref_waypoints == 0:
-            return
-        # reference waypoints array initialized.
+        req = LocateWaypointsAroundRequest(msg.pose)
+        resp = self.locate_waypoints_around(req)
+        if resp.behind >= 0 and resp.ahead >= 0:
+            self.pose_ref_waypoints_idx = (resp.behind, resp.ahead)
+        else:
+            self.pose_ref_waypoints_idx = None
 
-        # looking for reference waypoints for current pose, use
-        # previous reference waypoints if available
-
-        # a reasonable maximum distance between the current pose and
-        # reference waypoints.
-        MAX_DIST = 300
-        i = 0
-        if self.pose_ref_waypoints_idx is not None:
-            i = self.pose_ref_waypoints_idx[0]
-
-        checked = 0
-        while True:
-            checked += 1
-            # prevent from dead looping
-            if checked > num_all_ref_waypoints:
-                self.pose_ref_waypoints_idx = None
-                return
-            
-            # looping
-            if i >= num_all_ref_waypoints:
-                i -= self.all_ref_waypoints
-                
-            if self.dist(msg, self.all_ref_waypoints[i]) > MAX_DIST:
-                i += 1
-                continue
-            # calculate vectors for waypoint orientation and the
-            # direction from waypoint to pose, if the absolute angle
-            # between them is greater than 90 degrees, the waypoint is
-            # ahead of current pose
-            ref_wp_quaternion = [self.all_ref_waypoints[i].pose.pose.orientation.x,
-                                 self.all_ref_waypoints[i].pose.pose.orientation.y,
-                                 self.all_ref_waypoints[i].pose.pose.orientation.z,
-                                 self.all_ref_waypoints[i].pose.pose.orientation.w]
-            wp_orient_quaternion = tf.transformations.quaternion_multiply(
-                tf.transformations.quaternion_multiply(
-                    ref_wp_quaternion,
-                    [1, 0, 0, 0]),
-                tf.transformations.quaternion_inverse(
-                    ref_wp_quaternion))
-            wp_orient = np.array([wp_orient_quaternion[0],
-                                  wp_orient_quaternion[1],
-                                  wp_orient_quaternion[2]])
-            direct = np.array([msg.pose.position.x - self.all_ref_waypoints[i].pose.pose.position.x,
-                               msg.pose.position.y - self.all_ref_waypoints[i].pose.pose.position.y,
-                               0]) # z component ignored
- 
-            cos_theta = np.dot(wp_orient, direct) / \
-                        (np.linalg.norm(wp_orient) * np.linalg.norm(direct))
-            if cos_theta > 0:
-                i += 1
-            else:
-                # we've found one
-                ahead = i
-                behind = ahead - 1
-                if behind == -1:
-                    behind = num_all_ref_waypoints - 1
-                self.pose_ref_waypoints_idx = (behind, ahead)
-                break
         # FIXME: publishing 200 waypoints ahead of the current
         # waypoint, which can be used as an alt for the waypoints of
         # /final_waypoints message. Once waypoint updater (either
         # partial or full) is completed, these codes can be removed.
-        if self.pose_ref_waypoints_idx is not None:
+        num_all_ref_waypoints = len(self.all_ref_waypoints)
+        if self.pose_ref_waypoints_idx is not None and num_all_ref_waypoints > 0:
             final_waypoints_alt = Lane()
             final_waypoints_alt.header = Header()
             final_waypoints_alt.header.stamp = rospy.Time.now()
