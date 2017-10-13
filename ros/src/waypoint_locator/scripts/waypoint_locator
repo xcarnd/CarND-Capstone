@@ -34,8 +34,8 @@ class WaypointLocator(object):
 
         num_all_ref_waypoints = len(self.all_ref_waypoints)
         
-        if self.kdtree is None or num_all_ref_waypoints == 0:
-            return LocateWaypointsAroundResponse(-1, -1)
+        while self.kdtree is None or num_all_ref_waypoints == 0:
+            rospy.sleep(0.02)
 
         _, closest_index = self.kdtree.query((req.pose.position.x, req.pose.position.y))
 
