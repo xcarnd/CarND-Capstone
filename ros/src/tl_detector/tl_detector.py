@@ -10,6 +10,7 @@ from light_classification.tl_classifier import TLClassifier
 import tf
 import cv2
 import yaml
+from waypoint_locator.srv import *
 
 STATE_COUNT_THRESHOLD = 3
 
@@ -48,6 +49,10 @@ class TLDetector(object):
         self.last_state = TrafficLight.UNKNOWN
         self.last_wp = -1
         self.state_count = 0
+
+        # LocateWaypointsAround service
+        self.locate_waypoints_around = rospy.ServiceProxy('/waypoint_locator/locate_waypoints_around', LocateWaypointsAround)
+        rospy.wait_for_service('/waypoint_locator/locate_waypoints_around')
 
         rospy.spin()
 
@@ -100,8 +105,9 @@ class TLDetector(object):
             int: index of the closest waypoint in self.waypoints
 
         """
-        #TODO implement
-        return 0
+        req = LocateWaypointsAroundRequest(pose)
+        resp = self.locate_waypoints_around(req)
+        return resp.nearest
 
     def get_light_state(self, light):
         """Determines the current color of the traffic light
@@ -139,12 +145,46 @@ class TLDetector(object):
             car_position = self.get_closest_waypoint(self.pose.pose)
 
         #TODO find the closest visible traffic light (if one exists)
-
         if light:
-            state = self.get_light_state(light)
-            return light_wp, state
-        self.waypoints = None
+            light_wp = self.look_for_traffic_light_ahead(car_position, stop_line_positions)
+            if wp_idx > -1:
+                state = self.get_light_state(light)
+                return light_wp, state
         return -1, TrafficLight.UNKNOWN
+
+    def look_for_traffic_light_ahead(self, wp_car_pose_idx, stop_line_positions):
+        # fine to use brute-force searching since the number of
+        # traffic lights are quite small.
+        # looking for the closest light position
+        min_dist = 1e7
+        min_idx = -1
+        for idx, light in enumerate(self.lights):
+            light_pos = light.pose.position
+            dist = self.dist2d(pose.position, light_pos)
+            if dist < min_dist:
+                min_dist = dist
+                min_idx = idx
+        
+        # the closest one doesn't mean the one ahead
+        # get the stop line position for the light and check
+        # if the vehicle has passed the nearest waypoint
+        # of the stop line. if yes, then we should head for the
+        # next traffic light.
+        #
+        # but in fact we don't have to seek the light ahead in this
+        # case, because the light detector will only detect the
+        # nearest light around the vehicle's current position, the
+        # next traffic light is still out of sight at this moment.
+        x, y = stop_line_positions[min_idx]
+        stop_line_pos = Pose(x, y, 0)
+        wp_stop_line_idx = self.get_closest_waypoint(stop_line_pos)
+        if wp_car_pose_idx > wp_stop_line_idx:
+            return -1
+        else:
+            return wp_stop_line_idx
+
+    def dist2d(self, a, b):
+        return math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2)
 
 if __name__ == '__main__':
     try:
