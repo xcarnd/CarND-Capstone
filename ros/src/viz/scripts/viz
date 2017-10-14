@@ -38,9 +38,6 @@ class Viz(object):
         self.viz_waypoints_around_pub = rospy.Publisher('viz_waypoints_around', MarkerArray, queue_size=1)
         self.viz_current_path_pub = rospy.Publisher('viz_current_path', Path, queue_size=1)
 
-        # FIXME: publisher for /final_waypoints_alt. no needed once waypoint updater is completed.
-        self.final_waypoints_alt_pub = rospy.Publisher('final_waypoints_alt', Lane, queue_size=1)
-
         rospy.wait_for_service('/waypoint_locator/locate_waypoints_around')
 
         rate = rospy.Rate(30)
@@ -80,40 +77,6 @@ class Viz(object):
             self.pose_ref_waypoints_idx = (resp.behind, resp.ahead)
         else:
             self.pose_ref_waypoints_idx = None
-
-        # FIXME: publishing 200 waypoints ahead of the current
-        # waypoint, which can be used as an alt for the waypoints of
-        # /final_waypoints message. Once waypoint updater (either
-        # partial or full) is completed, these codes can be removed.
-        num_all_ref_waypoints = len(self.all_ref_waypoints)
-        if self.pose_ref_waypoints_idx is not None and num_all_ref_waypoints > 0:
-            final_waypoints_alt = Lane()
-            final_waypoints_alt.header = Header()
-            final_waypoints_alt.header.stamp = rospy.Time.now()
-            final_waypoints_alt.header.frame_id = "/world"
-            final_waypoints_alt.waypoints = []
-            
-            idx_ahead = self.pose_ref_waypoints_idx[1]
-            i = 0
-            while i < 200:
-                idx = idx_ahead + i
-                if idx >= num_all_ref_waypoints:
-                    idx -= num_all_ref_waypoints
-                ref_waypoint = self.all_ref_waypoints[idx]
-                
-                alt_waypoint = Waypoint()
-
-                alt_waypoint.pose = self.get_pose_stamped(ref_waypoint.pose.pose.position,
-                                                          ref_waypoint.pose.pose.orientation)
-                # twist stamped is not needed to construct a path, so
-                # leave them as empty (0)
-                alt_waypoint.twist.header = Header()
-                alt_waypoint.twist.header.stamp = rospy.Time.now()
-                alt_waypoint.twist.header.frame_id = "/world"
-
-                final_waypoints_alt.waypoints.append(alt_waypoint)
-                i += 1
-            self.final_waypoints_alt_pub.publish(final_waypoints_alt)
 
     def publish_current_path(self):
         if self.current_path is None:

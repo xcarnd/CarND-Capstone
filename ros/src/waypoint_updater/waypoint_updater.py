@@ -3,6 +3,8 @@
 import rospy
 from geometry_msgs.msg import PoseStamped
 from styx_msgs.msg import Lane, Waypoint
+from waypoint_locator.srv import *
+from std_msgs.msg import Header
 
 import math
 
@@ -28,33 +30,68 @@ class WaypointUpdater(object):
     def __init__(self):
         rospy.init_node('waypoint_updater')
 
+        # all the waypoints
+        self.all_ref_waypoints = []
+
         rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
         rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
 
         # TODO: Add a subscriber for /traffic_waypoint and /obstacle_waypoint below
-
-
         self.final_waypoints_pub = rospy.Publisher('final_waypoints', Lane, queue_size=1)
 
         # TODO: Add other member variables you need below
 
-        # FIXME: use /final_waypoints_alt as /final_waypoints if that topic is available
-        # remove it once waypoint updater is done.
-        rospy.Subscriber('/final_waypoints_alt', Lane, self.final_waypoints_alt_cb)
-
-        rospy.spin()
+        self.locate_waypoints_around = rospy.ServiceProxy('/waypoint_locator/locate_waypoints_around', LocateWaypointsAround)
+        rospy.wait_for_service('/waypoint_locator/locate_waypoints_around')
         
-    # FIXME: remove when waypoint updater is done
-    def final_waypoints_alt_cb(self, msg):
-        self.final_waypoints_pub.publish(msg)
+        rospy.spin()
 
     def pose_cb(self, msg):
-        # TODO: Implement
-        pass
+        # a simple implementation: find the reference waypoint ahead,
+        # then publish 200 waypoints from that ahead waypoint
+        num_all_ref_waypoints = len(self.all_ref_waypoints)
+        if len(self.all_ref_waypoints) == 0:
+            return
+        req = LocateWaypointsAroundRequest(msg.pose)
+        resp = self.locate_waypoints_around(req)
+
+        final_waypoints = Lane()
+        final_waypoints.header = Header()
+        final_waypoints.header.stamp = rospy.Time.now()
+        final_waypoints.header.frame_id = "/world"
+        final_waypoints.waypoints = []
+            
+        idx_ahead = resp.ahead
+        i = 0
+        while i < 200:
+            idx = idx_ahead + i
+            if idx >= num_all_ref_waypoints:
+                idx -= num_all_ref_waypoints
+            ref_waypoint = self.all_ref_waypoints[idx]
+            waypoint = Waypoint()
+            waypoint.pose.header = Header()
+            waypoint.pose.header.stamp = rospy.Time.now()
+            waypoint.pose.header.frame_id= "/world"
+            waypoint.pose.pose.position = ref_waypoint.pose.pose.position
+            waypoint.pose.pose.orientation = ref_waypoint.pose.pose.orientation
+            waypoint.twist.header = Header()
+            waypoint.twist.header.stamp = rospy.Time.now()
+            waypoint.twist.header.frame_id = "/world"
+            waypoint.twist.twist.linear = ref_waypoint.twist.twist.linear
+            waypoint.twist.twist.angular = ref_waypoint.twist.twist.angular
+
+            final_waypoints.waypoints.append(waypoint)
+            i += 1
+        self.final_waypoints_pub.publish(final_waypoints)
+        
 
     def waypoints_cb(self, waypoints):
-        # TODO: Implement
-        pass
+        # simple store all the reference waypoints
+        all_ref_waypoints = []
+        waypoints = waypoints.waypoints
+        for waypoint in waypoints:
+            all_ref_waypoints.append(waypoint)
+        self.all_ref_waypoints = all_ref_waypoints
 
     def traffic_cb(self, msg):
         # TODO: Callback for /traffic_waypoint message. Implement
