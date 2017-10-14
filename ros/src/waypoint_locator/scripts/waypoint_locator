@@ -32,10 +32,10 @@ class WaypointLocator(object):
         # so looking up one waypoint back and one waypoint forward and
         # determine.
 
-        num_all_ref_waypoints = len(self.all_ref_waypoints)
-        
-        while self.kdtree is None or num_all_ref_waypoints == 0:
+        while self.kdtree is None or len(self.all_ref_waypoints) == 0:
             rospy.sleep(0.02)
+
+        num_all_ref_waypoints = len(self.all_ref_waypoints)
 
         _, closest_index = self.kdtree.query((req.pose.position.x, req.pose.position.y))
 
