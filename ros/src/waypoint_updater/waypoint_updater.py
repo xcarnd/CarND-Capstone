@@ -62,9 +62,10 @@ class WaypointUpdater(object):
         final_waypoints.waypoints = []
             
         idx_ahead = resp.ahead
+        base_offset = 1
         i = 0
         while i < 200:
-            idx = idx_ahead + i
+            idx = idx_ahead + i + base_offset
             if idx >= num_all_ref_waypoints:
                 idx -= num_all_ref_waypoints
             ref_waypoint = self.all_ref_waypoints[idx]
