@@ -15,7 +15,7 @@ class YawController(object):
         """
             Get the real steering angle.
         """
-        angle = atan(self.wheel_base / radius) * self.steer_ratio
+        angle = atan(1.0*self.wheel_base / radius) * self.steer_ratio
         return max(self.min_angle, min(self.max_angle, angle))
 
     def get_steering(self, linear_velocity, angular_velocity, current_velocity):
