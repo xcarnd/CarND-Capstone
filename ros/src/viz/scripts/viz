@@ -122,13 +122,15 @@ class Viz(object):
                 r = range(num, -1, -1)
             else:
                 r = range(num + 1)
-                
+
             for i in r:
                 if t == 'behind':
-                    wp = self.all_ref_waypoints[self.pose_ref_waypoints_idx[0] - i]
+                    idx = self.pose_ref_waypoints_idx[0] - i
                 else:
-                    wp = self.all_ref_waypoints[self.pose_ref_waypoints_idx[1] + i]
+                    idx = self.pose_ref_waypoints_idx[1] + i
                     
+                wp = self.all_ref_waypoints[idx]
+                
                 marker_msg = Marker()
                 marker_msg.header = Header()
                 marker_msg.header.stamp = rospy.Time.now()
