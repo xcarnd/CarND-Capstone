@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import rospy
-from std_msgs.msg import Bool
+from std_msgs.msg import Bool, String
 from dbw_mkz_msgs.msg import ThrottleCmd, SteeringCmd, BrakeCmd, SteeringReport
 from geometry_msgs.msg import TwistStamped
 import math
@@ -51,19 +51,18 @@ class DBWNode(object):
         self.target_velocity = TwistStamped()
         self.current_velocity = TwistStamped()
         self.dbw_enabled = False
-        self.steer_pub = rospy.Publisher('/vehicle/steering_cmd',
-                                         SteeringCmd, queue_size=1)
-        self.throttle_pub = rospy.Publisher('/vehicle/throttle_cmd',
-                                            ThrottleCmd, queue_size=1)
-        self.brake_pub = rospy.Publisher('/vehicle/brake_cmd',
-                                         BrakeCmd, queue_size=1)
+        self.steer_pub = rospy.Publisher('/vehicle/steering_cmd',SteeringCmd, queue_size=1)
+        self.throttle_pub = rospy.Publisher('/vehicle/throttle_cmd', ThrottleCmd, queue_size=1)
+        self.brake_pub = rospy.Publisher('/vehicle/brake_cmd', BrakeCmd, queue_size=1)
+        self.debug_pub = rospy.Publisher('/dbw_node/debug', String, queue_size=1)
 
         sub1 = rospy.Subscriber('/twist_cmd', TwistStamped, self.twist_cb)
         sub2 = rospy.Subscriber('/current_velocity', TwistStamped, self.velocity_cb)
         sub3 = rospy.Subscriber('/vehicle/dbw_enabled', Bool, self.dbw_enable_cb)
 
         self.controller = Controller(brake_deadband, decel_limit, accel_limit, wheel_radius,
-                                        wheel_base, steer_ratio, max_lat_accel, max_steer_angle)
+                                        wheel_base, steer_ratio, max_lat_accel, max_steer_angle, 
+                                        vehicle_mass, self.debug_pub)
         self.loop()
 
 
