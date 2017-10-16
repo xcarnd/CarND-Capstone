@@ -91,6 +91,7 @@ class Bridge(object):
 
     def create_twist(self, velocity, angular):
         tw = TwistStamped()
+        tw.header.stamp = rospy.Time.now()
         tw.twist.linear.x = velocity
         tw.twist.angular.z = angular
         return tw
@@ -166,6 +167,7 @@ class Bridge(object):
         header = Header()
         header.stamp = rospy.Time.now()
         header.frame_id = '/world'
+        lights.header = header
         lights.lights = [self.create_light(*e) for e in zip(x, y, z, yaw, status)]
         self.publishers['trafficlights'].publish(lights)
 
