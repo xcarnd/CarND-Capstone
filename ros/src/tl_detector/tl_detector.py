@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import rospy
 from std_msgs.msg import Int32
-from geometry_msgs.msg import PoseStamped, Pose
+from geometry_msgs.msg import PoseStamped, Pose, Point, Quaternion
 from styx_msgs.msg import TrafficLightArray, TrafficLight
 from styx_msgs.msg import Lane
 from sensor_msgs.msg import Image
@@ -10,6 +10,7 @@ from light_classification.tl_classifier import TLClassifier
 import tf
 import cv2
 import yaml
+import math
 from waypoint_locator.srv import *
 
 STATE_COUNT_THRESHOLD = 3
@@ -60,7 +61,7 @@ class TLDetector(object):
         self.pose = msg
 
     def waypoints_cb(self, waypoints):
-        self.waypoints = waypoints
+        self.waypoints = waypoints.waypoints
 
     def traffic_cb(self, msg):
         self.lights = msg.lights
@@ -143,23 +144,33 @@ class TLDetector(object):
         stop_line_positions = self.config['stop_line_positions']
         if(self.pose):
             car_position = self.get_closest_waypoint(self.pose.pose)
+        else:
+            return -1, TrafficLight.UNKNOWN
 
-        #TODO find the closest visible traffic light (if one exists)
+        # find the closest visible traffic light (if one exists)
+        light = None
+        # for testing, uncomment below
+        # light = True
         if light:
-            light_wp = self.look_for_traffic_light_ahead(car_position, stop_line_positions)
+            wp_idx = self.look_for_traffic_light_ahead(car_position, stop_line_positions)
             if wp_idx > -1:
                 state = self.get_light_state(light)
-                return light_wp, state
+                # for testing, comment above line and uncomment below
+                # state = TrafficLight.RED
+                return wp_idx, state
         return -1, TrafficLight.UNKNOWN
 
     def look_for_traffic_light_ahead(self, wp_car_pose_idx, stop_line_positions):
         # fine to use brute-force searching since the number of
         # traffic lights are quite small.
         # looking for the closest light position
+        if self.waypoints is None:
+            return -1
+        pose = self.waypoints[wp_car_pose_idx].pose.pose
         min_dist = 1e7
         min_idx = -1
         for idx, light in enumerate(self.lights):
-            light_pos = light.pose.position
+            light_pos = light.pose.pose.position
             dist = self.dist2d(pose.position, light_pos)
             if dist < min_dist:
                 min_dist = dist
@@ -176,7 +187,7 @@ class TLDetector(object):
         # nearest light around the vehicle's current position, the
         # next traffic light is still out of sight at this moment.
         x, y = stop_line_positions[min_idx]
-        stop_line_pos = Pose(x, y, 0)
+        stop_line_pos = Pose(Point(x, y, 0), Quaternion(0, 0, 0, 1))
         wp_stop_line_idx = self.get_closest_waypoint(stop_line_pos)
         if wp_car_pose_idx > wp_stop_line_idx:
             return -1

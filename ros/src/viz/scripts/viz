@@ -5,11 +5,12 @@ import math
 import tf
 import numpy as np
 from visualization_msgs.msg import Marker, MarkerArray
-from std_msgs.msg import Header
+from std_msgs.msg import Header, Int32
 from geometry_msgs.msg import Point, Quaternion, PoseStamped
 from styx_msgs.msg import Lane, Waypoint
 from nav_msgs.msg import Path
 from waypoint_locator.srv import *
+import yaml
 
 class Viz(object):
     def __init__(self):
@@ -23,20 +24,30 @@ class Viz(object):
         # storing current path
         self.current_path = None
 
+        # get stop light position
+        config_string = rospy.get_param("/traffic_light_config")
+        self.config = yaml.load(config_string)
+        self.stop_line_positions = self.config['stop_line_positions']
+
         # remember waypoints index behind and ahead of the last
         # current_pose, so for the next round we can save the time for
         # looking
         self.pose_ref_waypoints_idx = None
+
+        # the last pose for detected red traffic
+        self.pose_red_light_idx = None
 
         self.locate_waypoints_around = rospy.ServiceProxy('/waypoint_locator/locate_waypoints_around', LocateWaypointsAround)
 
         rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb, queue_size=1)
         rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb, queue_size=1)
         rospy.Subscriber('/final_waypoints', Lane, self.final_waypoints_cb, queue_size=1)
+        rospy.Subscriber('/traffic_waypoint', Int32, self.traffic_waypoint_cb, queue_size=1)
 
         self.viz_current_pub = rospy.Publisher('viz_current_pose', PoseStamped, queue_size=1)
         self.viz_waypoints_around_pub = rospy.Publisher('viz_waypoints_around', Marker, queue_size=1)
         self.viz_current_path_pub = rospy.Publisher('viz_current_path', Path, queue_size=1)
+        self.viz_red_light_pub = rospy.Publisher('viz_red_light_stop', Marker, queue_size=1)
 
         rospy.wait_for_service('/waypoint_locator/locate_waypoints_around')
 
@@ -46,7 +57,38 @@ class Viz(object):
                 self.publish_current()
                 self.publish_waypoints_around()
                 self.publish_current_path()
+                self.publish_red_light()
             rate.sleep()
+
+    def publish_red_light(self):
+        if self.pose_red_light_idx is None:
+            return
+        # waypoint for red light position
+        pose = self.all_ref_waypoints[self.pose_red_light_idx].pose.pose
+
+        viz_red_light = Marker()
+        viz_red_light.header = Header()
+        viz_red_light.header.stamp = rospy.Time.now()
+        viz_red_light.header.frame_id = "/world"
+        viz_red_light.id = 1
+        viz_red_light.type = Marker.SPHERE
+        viz_red_light.ns = "/viz_light"
+        viz_red_light.action = Marker.ADD # or MODIFY. Both are 0
+
+        viz_red_light.pose = pose
+        
+        viz_red_light.scale.x = 1.0
+        viz_red_light.scale.y = 1.0
+        viz_red_light.scale.z = 1.0
+                
+        viz_red_light.color.r = 1.0
+        viz_red_light.color.g = 0.0
+        viz_red_light.color.b = 0.0
+        viz_red_light.color.a = 1.0
+
+        print(viz_red_light)
+
+        self.viz_red_light_pub.publish(viz_red_light)
 
     def final_waypoints_cb(self, msg):
         current_path = Path()
@@ -117,7 +159,7 @@ class Viz(object):
         msg.header.stamp = rospy.Time.now()
         msg.header.frame_id = "/world"
         msg.id = 1
-        msg.type = Marker.SPHERE_LIST
+        msg.type = Marker.CUBE_LIST
         msg.ns = "/viz_waypoints"
         msg.action = Marker.ADD # or MODIFY. Both are 0
         
@@ -128,7 +170,7 @@ class Viz(object):
         msg.color.r = 0.0
         msg.color.g = 1.0
         msg.color.b = 0.0
-        msg.color.a = 0.8
+        msg.color.a = 0.5
         
         wp_types = ['behind', 'ahead']
         # waypoints behind
@@ -174,6 +216,9 @@ class Viz(object):
         msg.pose.position = Point(position.x, position.y, position.z)
         msg.pose.orientation = Quaternion(orientation.x, orientation.y, orientation.z, orientation.w)
         return msg
+
+    def traffic_waypoint_cb(self, idx):
+        self.pose_red_light_idx = idx.data
 
 if __name__ == '__main__':
     try:
