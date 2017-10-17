@@ -1,0 +1,36 @@
+#!/usr/bin/env python
+
+import rospy
+import os
+import cv2
+from cv_bridge import CvBridge
+from sensor_msgs.msg import Image
+
+SAMPLE_OUTPUT_DIR="./samples/"
+
+class TldSampler(object):
+
+    def __init__(self):
+        rospy.init_node('tld_sampler')
+        self.num_collected = 0
+        self.cvBridge = CvBridge()
+        # subcribe to /image_color for getting the camera image
+        rospy.Subscriber('/image_color', Image, self.image_color_cb)
+        print("Start sampling")        
+        rospy.spin()
+
+    def image_color_cb(self, msg):
+        # pretty easy for sampling no lights image - just save image_color
+        directory = SAMPLE_OUTPUT_DIR
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+        cv_img = self.cvBridge.imgmsg_to_cv2(msg, 'bgr8')
+        cv2.imwrite(directory + "cap_" + str(rospy.Time.now().to_nsec()) + ".jpg", cv_img)
+        self.num_collected += 1
+        print("Collected {} images.".format(self.num_collected))
+
+if __name__ == '__main__':
+    try:
+        TldSampler()
+    except rospy.ROSInterruptException:
+        pass
