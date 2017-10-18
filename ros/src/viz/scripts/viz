@@ -5,7 +5,7 @@ import math
 import tf
 import numpy as np
 from visualization_msgs.msg import Marker, MarkerArray
-from std_msgs.msg import Header, Int32
+from std_msgs.msg import Header, Int32, Time
 from geometry_msgs.msg import Point, Quaternion, PoseStamped
 from styx_msgs.msg import Lane, Waypoint
 from nav_msgs.msg import Path
@@ -19,10 +19,13 @@ class Viz(object):
         # storage for all the waypoints
         self.all_ref_waypoints = []
 
-        self.current_pose = None
+        self.last_pose = None
 
         # storing current path
-        self.current_path = None
+        self.last_path = None
+
+        # last received final waypoints
+        self.last_final_waypoints = None
 
         # get stop light position
         config_string = rospy.get_param("/traffic_light_config")
@@ -41,8 +44,10 @@ class Viz(object):
 
         rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb, queue_size=1)
         rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb, queue_size=1)
-        rospy.Subscriber('/final_waypoints', Lane, self.final_waypoints_cb, queue_size=1)
+        rospy.Subscriber('/final_waypoints', Lane, self.final_waypoints_cb, queue_size=1, buff_size=100000)
         rospy.Subscriber('/traffic_waypoint', Int32, self.traffic_waypoint_cb, queue_size=1)
+        
+        rospy.Subscriber('/viz_time', Time, self.viz_time_seq_cb, queue_size=1)
 
         self.viz_current_pub = rospy.Publisher('viz_current_pose', PoseStamped, queue_size=1)
         self.viz_waypoints_around_pub = rospy.Publisher('viz_waypoints_around', Marker, queue_size=1)
@@ -51,14 +56,14 @@ class Viz(object):
 
         rospy.wait_for_service('/waypoint_locator/locate_waypoints_around')
 
-        rate = rospy.Rate(30)
-        while not rospy.is_shutdown():
-            if len(self.all_ref_waypoints) > 0:
-                self.publish_current()
-                self.publish_waypoints_around()
-                self.publish_current_path()
-                self.publish_red_light()
-            rate.sleep()
+        rospy.spin()
+
+    def viz_time_seq_cb(self, msg):
+        if len(self.all_ref_waypoints) > 0:
+            self.publish_current()
+            self.publish_waypoints_around()
+            self.publish_current_path()
+            self.publish_red_light()
 
     def publish_red_light(self):
         if self.pose_red_light_idx is None:
@@ -86,65 +91,63 @@ class Viz(object):
         viz_red_light.color.b = 0.0
         viz_red_light.color.a = 1.0
 
-        print(viz_red_light)
-
         self.viz_red_light_pub.publish(viz_red_light)
 
-    def final_waypoints_cb(self, msg):
-        current_path = Path()
-        current_path.header = Header()
-        current_path.header.stamp = rospy.Time.now()
-        current_path.header.frame_id = "/world"
-        current_path.poses = []
-        waypoints = msg.waypoints
+    def make_last_path(self):
+        if self.last_final_waypoints is None:
+            return
+        
+        path = Path()
+        path.header = Header()
+        path.header.stamp = rospy.Time.now()
+        path.header.frame_id = "/world"
+        path.poses = []
+        waypoints = self.last_final_waypoints.waypoints
         # thresholding the number of final waypoints
         waypoints_thresh = 50
         counter = 0
         for wp in waypoints:
             position = wp.pose.pose.position
             orientation = wp.pose.pose.orientation
-            current_path.poses.append(
+            path.poses.append(
                 self.get_pose_stamped(position, orientation))
             counter += 1
             if counter > waypoints_thresh:
                 break
-        self.current_path = current_path
+        self.last_path = path
 
+    def final_waypoints_cb(self, msg):
+        self.last_final_waypoints = msg
+        
     def pose_cb(self, msg):
-        self.current_pose = msg
+        self.last_pose = msg
 
-        req = LocateWaypointsAroundRequest(msg.pose)
+    def publish_current(self):
+        if self.last_pose is None:
+            return
+        
+        req = LocateWaypointsAroundRequest(self.last_pose.pose)
         resp = self.locate_waypoints_around(req)
         if resp.behind >= 0 and resp.ahead >= 0:
             self.pose_ref_waypoints_idx = (resp.behind, resp.ahead)
         else:
             self.pose_ref_waypoints_idx = None
 
-    def publish_current_path(self):
-        if self.current_path is None:
-            return
-
-        self.viz_current_path_pub.publish(self.current_path)
-
-    def publish_current(self):
-        if self.current_pose is None:
-            return
+        last_pose = PoseStamped()
+        last_pose.header = Header()
+        last_pose.header.stamp = rospy.Time.now()
+        last_pose.header.frame_id = "/world"
         
-        msg_copy = PoseStamped()
-        msg_copy.header = Header()
-        msg_copy.header.stamp = rospy.Time.now()
-        msg_copy.header.frame_id = "/world"
-        
-        msg_copy.pose.position.x = self.current_pose.pose.position.x
-        msg_copy.pose.position.y = self.current_pose.pose.position.y
-        msg_copy.pose.position.z = self.current_pose.pose.position.z
+        last_pose.pose.position.x = self.last_pose.pose.position.x
+        last_pose.pose.position.y = self.last_pose.pose.position.y
+        last_pose.pose.position.z = self.last_pose.pose.position.z
 
-        msg_copy.pose.orientation.x = self.current_pose.pose.orientation.x
-        msg_copy.pose.orientation.y = self.current_pose.pose.orientation.y
-        msg_copy.pose.orientation.z = self.current_pose.pose.orientation.z
-        msg_copy.pose.orientation.w = self.current_pose.pose.orientation.w
+        last_pose.pose.orientation.x = self.last_pose.pose.orientation.x
+        last_pose.pose.orientation.y = self.last_pose.pose.orientation.y
+        last_pose.pose.orientation.z = self.last_pose.pose.orientation.z
+        last_pose.pose.orientation.w = self.last_pose.pose.orientation.w
                 
-        self.viz_current_pub.publish(msg_copy)
+        self.viz_current_pub.publish(last_pose)
 
     def publish_waypoints_around(self):
         """Visualizing reference waypoints by publishing visualization_msgs/Marker."""
@@ -194,7 +197,15 @@ class Viz(object):
                                         wp.pose.pose.position.y,
                                         wp.pose.pose.position.z))
         self.viz_waypoints_around_pub.publish(msg)
-            
+
+    def publish_current_path(self):
+        self.make_last_path()
+        
+        if self.last_path is None:
+            return
+
+        self.viz_current_path_pub.publish(self.last_path)
+
     def dist(self, pose, wp):
         a = pose.pose.position
         b = wp.pose.pose.position

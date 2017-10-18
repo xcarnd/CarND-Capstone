@@ -1,0 +1,25 @@
+#!/usr/bin/env python
+
+import rospy
+from std_msgs.msg import Time
+
+class VizTimeGenerator(object):
+    def __init__(self):
+        rospy.init_node('time_generator')
+
+        freq = rospy.get_param('~frequency', 30)
+
+        self.time_sequence_pub = rospy.Publisher('viz_time', Time, queue_size=1)
+        
+        rate = rospy.Rate(freq)
+        while not rospy.is_shutdown():
+            msg = Time()
+            msg.data = rospy.Time.now()
+            self.time_sequence_pub.publish(msg)
+            rate.sleep()
+
+if __name__ == '__main__':
+    try:
+        VizTimeGenerator()
+    except rospy.ROSInterruptException:
+        pass
