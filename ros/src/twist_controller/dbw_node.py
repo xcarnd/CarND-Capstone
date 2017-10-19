@@ -2,8 +2,9 @@
 
 import rospy
 from std_msgs.msg import Bool, String
+from styx_msgs.msg import Lane, Waypoint
 from dbw_mkz_msgs.msg import ThrottleCmd, SteeringCmd, BrakeCmd, SteeringReport
-from geometry_msgs.msg import TwistStamped
+from geometry_msgs.msg import TwistStamped, PoseStamped
 import math
 
 from twist_controller import Controller
@@ -48,8 +49,10 @@ class DBWNode(object):
         max_lat_accel = rospy.get_param('~max_lat_accel', 3.)
         max_steer_angle = rospy.get_param('~max_steer_angle', 8.)
 
-        self.target_velocity = TwistStamped()
-        self.current_velocity = TwistStamped()
+        self.target_velocity = None
+        self.current_velocity = None
+        self.current_posistion = None
+        self.target_position = None
         self.dbw_enabled = False
         self.steer_pub = rospy.Publisher('/vehicle/steering_cmd',SteeringCmd, queue_size=1)
         self.throttle_pub = rospy.Publisher('/vehicle/throttle_cmd', ThrottleCmd, queue_size=1)
@@ -59,6 +62,9 @@ class DBWNode(object):
         sub1 = rospy.Subscriber('/twist_cmd', TwistStamped, self.twist_cb)
         sub2 = rospy.Subscriber('/current_velocity', TwistStamped, self.velocity_cb)
         sub3 = rospy.Subscriber('/vehicle/dbw_enabled', Bool, self.dbw_enable_cb)
+        sub4 = rospy.Subscriber('/final_waypoints', Lane, self.final_waypoints_cb)
+        #sub5 = rospy.Subscriber('/base_waypoints', Lane, self.base_waypoints_cb)
+        sub6 = rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
 
         self.controller = Controller(brake_deadband, decel_limit, accel_limit, wheel_radius,
                                         wheel_base, steer_ratio, max_lat_accel, max_steer_angle, 
@@ -77,11 +83,46 @@ class DBWNode(object):
     def dbw_enable_cb(self, msg):
         self.dbw_enabled = msg.data
 
+    def pose_cb(self, msg):
+        self.current_posistion = msg.pose.position
+
+    def final_waypoints_cb(self, waypoints):        
+        self.target_position = waypoints.waypoints[0].pose.pose.position
+
+    def base_waypoints_cb(self, waypoints):
+        """
+            This function will only run once.
+            This function is to overview the base waypoints.
+        """
+        waypoints = waypoints.waypoints
+        d_sum = 0
+        max_interval = 0
+        z_max = z_min = 0
+        for i in range(1, len(waypoints), 1):
+            x1 = waypoints[i-1].pose.pose.position.x
+            x2 = waypoints[i].pose.pose.position.x
+            y1 = waypoints[i-1].pose.pose.position.y
+            y2 = waypoints[i].pose.pose.position.y
+            z = waypoints[i].pose.pose.position.z
+            d = math.sqrt( (x2-x1)**2 + (y2-y1)**2 )
+            d_sum += d
+            if d > max_interval:
+                max_interval = d
+            if z > z_max: z_max = z
+            if z < z_min: z_min = z
+
+        #rospy.loginfo_once("This message will print only once")
+        rospy.logwarn("Number of waypoints: %d, max interval: %.2f, way length: %.2f",
+                        len(waypoints), max_interval, d_sum)
+        if z_max - z_min == 0:
+            rospy.logwarn("All the way is flat.")
+        else:
+            rospy.logwarn("There is %2f Height difference.", z_max - z_min)
 
     def loop(self):
         rate = rospy.Rate(50) # 50Hz
 
-        while not (self.target_velocity and self.current_velocity):
+        while not (self.target_velocity and self.current_velocity and self.target_position and self.current_posistion):
             rospy.loginfo("Target_velocity or current_velocity missing.")
             rate.sleep()
 
@@ -90,6 +131,8 @@ class DBWNode(object):
                                                                 self.target_velocity.twist.angular,
                                                                 self.current_velocity.twist.linear,
                                                                 self.current_velocity.twist.angular,
+                                                                self.target_position,
+                                                                self.current_posistion,
                                                                 self.dbw_enabled)
             if self.dbw_enabled:
                 self.publish(throttle, brake, steering)
