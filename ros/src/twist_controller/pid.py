@@ -38,7 +38,7 @@ class PID(object):
         y = max(self.min, min(y, self.max))
         self.last_int_val = integral
         self.last_error = error
-        if self.pid_type == 'angle':
-            rospy.logwarn_throttle(0.4, "y: %.4f, p: %.4f, i: %.4f, d: %.4f" 
-                                %(y, self.kp * error, self.ki * integral, self.kd * derivative))
+#         if self.pid_type == 'angle':
+#             rospy.logwarn_throttle(0.4, "y: %.4f, p: %.4f, i: %.4f, d: %.4f" 
+#                                 %(y, self.kp * error, self.ki * integral, self.kd * derivative))
         return y
