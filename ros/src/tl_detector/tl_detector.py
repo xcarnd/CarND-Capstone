@@ -22,20 +22,11 @@ class TLDetector(object):
         self.pose = None
         self.waypoints = None
         self.camera_image = None
-        self.lights = []
+        self.lights = None
 
-        sub1 = rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
-        sub2 = rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
-
-        '''
-        /vehicle/traffic_lights provides you with the location of the traffic light in 3D map space and
-        helps you acquire an accurate ground truth data source for the traffic light
-        classifier by sending the current color state of all traffic lights in the
-        simulator. When testing on the vehicle, the color state will not be available. You'll need to
-        rely on the position of the light and the camera image to predict it.
-        '''
-        sub3 = rospy.Subscriber('/vehicle/traffic_lights', TrafficLightArray, self.traffic_cb)
-        sub6 = rospy.Subscriber('/image_color', Image, self.image_cb)
+        # LocateWaypointsAround service
+        self.locate_waypoints_around = rospy.ServiceProxy('/waypoint_locator/locate_waypoints_around', LocateWaypointsAround)
+        rospy.wait_for_service('/waypoint_locator/locate_waypoints_around')
 
         config_string = rospy.get_param("/traffic_light_config")
         self.config = yaml.load(config_string)
@@ -51,9 +42,18 @@ class TLDetector(object):
         self.last_wp = -1
         self.state_count = 0
 
-        # LocateWaypointsAround service
-        self.locate_waypoints_around = rospy.ServiceProxy('/waypoint_locator/locate_waypoints_around', LocateWaypointsAround)
-        rospy.wait_for_service('/waypoint_locator/locate_waypoints_around')
+        sub1 = rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb, queue_size=1)
+        sub2 = rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
+
+        '''
+        /vehicle/traffic_lights provides you with the location of the traffic light in 3D map space and
+        helps you acquire an accurate ground truth data source for the traffic light
+        classifier by sending the current color state of all traffic lights in the
+        simulator. When testing on the vehicle, the color state will not be available. You'll need to
+        rely on the position of the light and the camera image to predict it.
+        '''
+        sub3 = rospy.Subscriber('/vehicle/traffic_lights', TrafficLightArray, self.traffic_cb, queue_size=1)
+        sub6 = rospy.Subscriber('/image_color', Image, self.image_cb, queue_size=1)
 
         rospy.spin()
 
@@ -138,6 +138,9 @@ class TLDetector(object):
             int: ID of traffic light color (specified in styx_msgs/TrafficLight)
 
         """
+        if self.lights is None:
+            return -1, TrafficLight.UNKNOWN
+        
         light = None
 
         # List of positions that correspond to the line to stop in front of for a given intersection
@@ -148,16 +151,18 @@ class TLDetector(object):
             return -1, TrafficLight.UNKNOWN
 
         # find the closest visible traffic light (if one exists)
-        light = None
-        # for testing, uncomment below
+        wp_idx, light_idx = self.look_for_traffic_light_ahead(car_position,
+                                                              stop_line_positions)
+
+        if wp_idx > -1:
+            light = self.lights[light_idx]
+        # to bypass the traffic light detector, uncomment below line, and -->
         # light = True
         if light:
-            wp_idx = self.look_for_traffic_light_ahead(car_position, stop_line_positions)
-            if wp_idx > -1:
-                state = self.get_light_state(light)
-                # for testing, comment above line and uncomment below
-                # state = TrafficLight.RED
-                return wp_idx, state
+            state = self.get_light_state(light)
+            # <-- and comment above line, then uncomment below line
+            # state = TrafficLight.RED
+            return wp_idx, state
         return -1, TrafficLight.UNKNOWN
 
     def look_for_traffic_light_ahead(self, wp_car_pose_idx, stop_line_positions):
@@ -165,7 +170,7 @@ class TLDetector(object):
         # traffic lights are quite small.
         # looking for the closest light position
         if self.waypoints is None:
-            return -1
+            return -1, -1
         pose = self.waypoints[wp_car_pose_idx].pose.pose
         min_dist = 1e7
         min_idx = -1
@@ -175,6 +180,14 @@ class TLDetector(object):
             if dist < min_dist:
                 min_dist = dist
                 min_idx = idx
+
+        MAX_EUCLIDEAN_DIST = 100
+        # fast filtering out: if the vehicle is still too far away
+        # from the nearest traffic light in euclidean distance
+        # (specified by MAX_EUCLIDEAN_DIST) , then just report there's
+        # no traffic light ahead
+        if min_dist > MAX_EUCLIDEAN_DIST:
+            return -1, -1
         
         # the closest one doesn't mean the one ahead
         # get the stop line position for the light and check
@@ -190,12 +203,28 @@ class TLDetector(object):
         stop_line_pos = Pose(Point(x, y, 0), Quaternion(0, 0, 0, 1))
         wp_stop_line_idx = self.get_closest_waypoint(stop_line_pos)
         if wp_car_pose_idx > wp_stop_line_idx:
-            return -1
+            return -1, -1
         else:
-            return wp_stop_line_idx
+            # even if the euclidean distance is close enough, we'll
+            # still have to check if they are really close enough by
+            # calculating the distance between the two waypoints.
+            if self.waypoint_distance(wp_car_pose_idx, wp_stop_line_idx) > MAX_EUCLIDEAN_DIST:
+                return -1, -1
+            return wp_stop_line_idx, min_idx
 
     def dist2d(self, a, b):
         return math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2)
+
+    # calculate the distance between two waypoints by accumulating the
+    # length of the piecewise segment. may be integrated into waypoint
+    # locator's services.
+    def waypoint_distance(self, wp1, wp2):
+        dist = 0
+        dl = lambda a, b: math.sqrt((a.x-b.x)**2 + (a.y-b.y)**2  + (a.z-b.z)**2)
+        for i in range(wp1, wp2+1):
+            dist += dl(self.waypoints[wp1].pose.pose.position, self.waypoints[i].pose.pose.position)
+            wp1 = i
+        return dist
 
 if __name__ == '__main__':
     try:
