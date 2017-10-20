@@ -25,7 +25,12 @@ class TldSampler(object):
         if not os.path.exists(directory):
             os.makedirs(directory)
         cv_img = self.cvBridge.imgmsg_to_cv2(msg, 'bgr8')
-        cv2.imwrite(directory + "cap_" + str(rospy.Time.now().to_nsec()) + ".jpg", cv_img)
+        # crop image into a square since... many popular network
+        # use square input
+        # since output is of size (600, 800), let's crop it to be (600, 600)
+        # no cropping in the vertical direction, for the horizontal direction,
+        # crop 100 pixels each
+        cv2.imwrite(directory + "cap_" + str(rospy.Time.now().to_nsec()) + ".jpg", cv_img[0:600, 100:700])
         self.num_collected += 1
         print("Collected {} images.".format(self.num_collected))
 
