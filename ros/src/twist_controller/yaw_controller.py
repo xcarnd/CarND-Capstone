@@ -21,8 +21,8 @@ class YawController(object):
     def get_steering(self, linear_velocity, angular_velocity, current_velocity):
 
         angular_velocity = current_velocity * angular_velocity / linear_velocity if abs(linear_velocity) > 0. else 0. 
-        if abs(linear_velocity) == 0:
-            angular_velocity = 0
+        # if abs(current_velocity) < 0.5:
+        #     angular_velocity = 0
 
         if abs(current_velocity) > 0.1:
             max_yaw_rate = abs(self.max_lat_accel / current_velocity);  # what's the mean?

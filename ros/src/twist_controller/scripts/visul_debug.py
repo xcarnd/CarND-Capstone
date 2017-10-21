@@ -13,7 +13,9 @@ class Debug_visual():
         self.draw_type = 'line' if len(argv) < 2 else argv[1]
         self.max_save_size = 5000 if len(argv) < 3 else argv[2]
         self.vision_size = 1500 if len(argv) < 4 else argv[3]
-        self.color = ['b', 'g', 'r', 'c', 'm', 'y', 'k', 'g']
+        self.color = ['b', 'g', 'r', 'c', 'm', 'y', 'k', 
+                        'tab:purple', 'tab:brown', 'tab:pink', 'tab:gray', 'tab:olive', 'tab:cyan']
+        self.maker = ['.', '-o', '*', '+', ',']
         self.map_key_x = '_x'
         self.map_key_y = '_y'
         plt.ion()
