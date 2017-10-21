@@ -69,7 +69,8 @@ class WaypointLocator(object):
         rospy.loginfo("Base waypoints received. WaypointLocator service ready.")
 
     def get_cos_angle_between(self, v1, v2):
-        return np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
+        product = np.linalg.norm(v1) * np.linalg.norm(v2)
+        return 1 if product == 0 else np.dot(v1, v2) / product
 
 if __name__ == '__main__':
     try:
