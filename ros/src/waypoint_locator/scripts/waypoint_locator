@@ -17,6 +17,10 @@ class WaypointLocator(object):
         rospy.init_node('waypoint_locator')
 
         self.all_ref_waypoints = []
+        # store the frenet coordinate of the waypoints
+        self.waypoints_frenet_s = []
+        # length of the track
+        self.length_of_track = 0
         self.kdtree = None
         
         rospy.Service('~locate_waypoints_around', LocateWaypointsAround, self.locate_waypoints_around)
@@ -54,6 +58,8 @@ class WaypointLocator(object):
         ca1 = self.get_cos_angle_between(v_j_p, v_j_i)
         ca2 = self.get_cos_angle_between(v_j_p, v_j_k)
 
+        # FIXME: to determin which waypoints is ahead which one behind,
+        # the orientation of the pose is needed.
         nearest, behind, ahead = (ca1 > ca2) and (j, i, j) or (j, j, k)
         return LocateWaypointsAroundResponse(nearest, behind, ahead)
 
@@ -61,15 +67,31 @@ class WaypointLocator(object):
         all_ref_waypoints = []
         waypoints = waypoints.waypoints
         xy_pairs = []
+        previous_waypoint = None
+        s = []
+        total_length = 0
         for waypoint in waypoints:
             all_ref_waypoints.append(waypoint)
             xy_pairs.append((waypoint.pose.pose.position.x, waypoint.pose.pose.position.y))
+            if previous_waypoint is not None:
+                delta_dist = self.dist2d(previous_waypoint, waypoint)
+                total_length += delta_dist
+            s.append(total_length)
+            previous_waypoint = waypoint
+            
+        self.waypoints_frenet_s = s
+        self.length_of_track = total_length
+                
         self.kdtree = cKDTree(xy_pairs)
         self.all_ref_waypoints = all_ref_waypoints
         rospy.loginfo("Base waypoints received. WaypointLocator service ready.")
 
     def get_cos_angle_between(self, v1, v2):
         return np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
+
+    def dist2d(self, p1, p2):
+        return math.sqrt((p1.pose.pose.position.x - p2.pose.pose.position.x) ** 2 +
+                         (p1.pose.pose.position.y - p2.pose.pose.position.y) ** 2)
 
 if __name__ == '__main__':
     try:
