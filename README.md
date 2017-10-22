@@ -1,8 +1,8 @@
 ## Udacity Self-Driving Car Engineer Nanodegree
-# Final Project: System Integration - PAW Patrol Team
+# Final Project: System Integration - The PAW Patrol Team
 
 
-This is the last project for the Udacity Self-Driving Car Nanodegree Program. Also, this is the first team project! We have a team contained of members from three continents, three time zones: US (San Francisco Bay Area), Europe (a small country - Serbia) and the China. 
+This is the last project for the Udacity Self-Driving Car Nanodegree Program. Also, this is the first team project! Members of our team comes from three continents, three time zones: US (San Francisco Bay Area), Europe (a small country - Serbia) and China. 
 
 
 Meet the PAW Patrol Team: 
@@ -10,7 +10,7 @@ Meet the PAW Patrol Team:
 
 Name | GitHub | Location | Task
 ------------ | ------------- | ------------- | -------------
-Jelena Kocic (team lead) | @cvetakg | Belgrade, Serbia (Europe)| Waypoint Uploader Partial
+Jelena Kocic (team lead) | @cvetakg | Belgrade, Serbia| Waypoint Uploader Partial
 Zhuhui Chen | @xcarnd | China | Traffic Light Detection - Waypoint publishing, Waypoint Uploader Partial
 Haocheng Yang | @cabbagehao | China | DBW Node, Waypoint Uploader Full
 Adarsha Badarinath | @adarshakb | San Francisco Bay Area, CA| Traffic Light Detection - Detection
