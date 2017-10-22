@@ -2,7 +2,7 @@
 import rospy
 from std_msgs.msg import Int32
 from geometry_msgs.msg import PoseStamped, Pose, Point, Quaternion
-from styx_msgs.msg import TrafficLightArray, TrafficLight
+from styx_msgs.msg import TrafficLightArray, TrafficLight, TrafficLightState
 from styx_msgs.msg import Lane
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
@@ -19,6 +19,8 @@ class TLDetector(object):
     def __init__(self):
         rospy.init_node('tl_detector')
 
+        self.use_ground_truth = rospy.get_param("~use_ground_truth", False)
+
         self.pose = None
         self.waypoints = None
         self.camera_image = None
@@ -31,7 +33,7 @@ class TLDetector(object):
         config_string = rospy.get_param("/traffic_light_config")
         self.config = yaml.load(config_string)
 
-        self.upcoming_red_light_pub = rospy.Publisher('/traffic_waypoint', Int32, queue_size=1)
+        self.upcoming_light_pub = rospy.Publisher('/traffic_waypoint', TrafficLightState, queue_size=1)
 
         self.bridge = CvBridge()
         self.light_classifier = TLClassifier()
@@ -77,7 +79,7 @@ class TLDetector(object):
         self.has_image = True
         self.camera_image = msg
         light_wp, state = self.process_traffic_lights()
-
+        
         '''
         Publish upcoming red lights at camera frequency.
         Each predicted state has to occur `STATE_COUNT_THRESHOLD` number
@@ -89,11 +91,12 @@ class TLDetector(object):
             self.state = state
         elif self.state_count >= STATE_COUNT_THRESHOLD:
             self.last_state = self.state
-            light_wp = light_wp if state == TrafficLight.RED else -1
+            if state == TrafficLight.UNKNOWN:
+                light_wp = -1
             self.last_wp = light_wp
-            self.upcoming_red_light_pub.publish(Int32(light_wp))
+            self.upcoming_light_pub.publish(TrafficLightState(light_wp, state))
         else:
-            self.upcoming_red_light_pub.publish(Int32(self.last_wp))
+            self.upcoming_light_pub.publish(TrafficLightState(self.last_wp, self.last_state))
         self.state_count += 1
 
     def get_closest_waypoint(self, pose):
@@ -156,12 +159,14 @@ class TLDetector(object):
 
         if wp_idx > -1:
             light = self.lights[light_idx]
-        # to bypass the traffic light detector, uncomment below line, and -->
-        # light = True
+        # to bypass the traffic light detector, set param
+        # /tl_detector/use_ground_truth to True to bypass the traffic
         if light:
-            state = self.get_light_state(light)
-            # <-- and comment above line, then uncomment below line
-            # state = TrafficLight.RED
+            if self.use_ground_truth:
+                # ground truth is stored in light.state
+                state = light.state
+            else:
+                state = self.get_light_state(light)
             return wp_idx, state
         return -1, TrafficLight.UNKNOWN
 
