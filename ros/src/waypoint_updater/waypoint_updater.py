@@ -3,9 +3,8 @@
 import rospy
 from geometry_msgs.msg import PoseStamped, TwistStamped
 from styx_msgs.msg import Lane, Waypoint
-from waypoint_locator.srv import *
 from std_msgs.msg import Header
-
+from location_utils.locator import WaypointLocator
 import math
 
 '''
@@ -28,6 +27,7 @@ class WaypointUpdater(object):
     def __init__(self):
         rospy.init_node('waypoint_updater')
         # all the waypoints
+        self.locator = None
         self.all_ref_waypoints = []
         self.current_linear_velocity = 0
         # control the number of final waypoints.
@@ -42,9 +42,6 @@ class WaypointUpdater(object):
         # TODO: Add a subscriber for /traffic_waypoint and /obstacle_waypoint below
         self.final_waypoints_pub = rospy.Publisher('final_waypoints', Lane, queue_size=1)
 
-        self.locate_waypoints_around = rospy.ServiceProxy('/waypoint_locator/locate_waypoints_around', LocateWaypointsAround)
-        rospy.wait_for_service('/waypoint_locator/locate_waypoints_around')
-        
         rospy.spin()
 
     def pose_cb(self, msg):
@@ -53,6 +50,8 @@ class WaypointUpdater(object):
             The waypoint follwer minimum detect distance is min(6m, 2s * current_velocity).
             So, the final waypoint from 0m to max(6m, 3s * current_velocity) is enough.
         """
+        if self.locator is None:
+            return
         num_all_ref_waypoints = len(self.all_ref_waypoints)
         if num_all_ref_waypoints == 0:
             return
@@ -67,10 +66,8 @@ class WaypointUpdater(object):
         final_waypoints.header.frame_id = "/world"
         final_waypoints.waypoints = []
 
-        # Find the reference waypoint ahead first          
-        req = LocateWaypointsAroundRequest(msg.pose)
-        resp = self.locate_waypoints_around(req)
-        idx_ahead = resp.ahead
+        # Find the reference waypoint ahead first
+        _, _, idx_ahead = self.locator.locate_waypoints_around(msg.pose)
 
         # Add the qualified waypoints to final waypoint.
         for i in range(num_all_ref_waypoints):
@@ -102,6 +99,7 @@ class WaypointUpdater(object):
 
     def waypoints_cb(self, waypoints):
         self.all_ref_waypoints = waypoints.waypoints
+        self.locator = WaypointLocator(self.all_ref_waypoints)
         self.base_waypoints_info()
 
     def base_waypoints_info(self):
