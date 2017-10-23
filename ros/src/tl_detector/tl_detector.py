@@ -11,7 +11,7 @@ import tf
 import cv2
 import yaml
 import math
-from waypoint_locator.srv import *
+from location_utils.locator import WaypointLocator
 
 STATE_COUNT_THRESHOLD = 3
 
@@ -26,9 +26,7 @@ class TLDetector(object):
         self.camera_image = None
         self.lights = None
 
-        # LocateWaypointsAround service
-        self.locate_waypoints_around = rospy.ServiceProxy('/waypoint_locator/locate_waypoints_around', LocateWaypointsAround)
-        rospy.wait_for_service('/waypoint_locator/locate_waypoints_around')
+        self.locator = None
 
         config_string = rospy.get_param("/traffic_light_config")
         self.config = yaml.load(config_string)
@@ -64,6 +62,7 @@ class TLDetector(object):
 
     def waypoints_cb(self, waypoints):
         self.waypoints = waypoints.waypoints
+        self.locator = WaypointLocator(self.waypoints)
 
     def traffic_cb(self, msg):
         self.lights = msg.lights
@@ -109,9 +108,10 @@ class TLDetector(object):
             int: index of the closest waypoint in self.waypoints
 
         """
-        req = LocateWaypointsAroundRequest(pose)
-        resp = self.locate_waypoints_around(req)
-        return resp.nearest
+        if self.locator is None:
+            return -1
+        nearest, _, _ = self.locator.locate_waypoints_around(pose)
+        return nearest
 
     def get_light_state(self, light):
         """Determines the current color of the traffic light
@@ -181,6 +181,12 @@ class TLDetector(object):
         min_idx = -1
         for idx, light in enumerate(self.lights):
             light_pos = light.pose.pose.position
+            
+            pos = Pose(Point(light_pos.x, light_pos.y, 0), Quaternion(0, 0, 0, 1))
+            light_wp_idx = self.get_closest_waypoint(pos)
+            if wp_car_pose_idx > light_wp_idx:
+                continue
+            
             dist = self.dist2d(pose.position, light_pos)
             if dist < min_dist:
                 min_dist = dist
@@ -213,7 +219,9 @@ class TLDetector(object):
             # even if the euclidean distance is close enough, we'll
             # still have to check if they are really close enough by
             # calculating the distance between the two waypoints.
-            if self.waypoint_distance(wp_car_pose_idx, wp_stop_line_idx) > MAX_EUCLIDEAN_DIST:
+            dist = self.waypoint_distance(wp_car_pose_idx, wp_stop_line_idx)
+            rospy.logdebug("Distance to nearest stop line waypoint: {:.2f}".format(dist))
+            if dist > MAX_EUCLIDEAN_DIST:
                 return -1, -1
             return wp_stop_line_idx, min_idx
 

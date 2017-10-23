@@ -7,7 +7,6 @@ import numpy as np
 import time
 
 from keras.models import load_model
-import keras.applications.mobilenet as mobilenet
 import cv2
 
 class TLClassifier(object):
@@ -19,10 +18,7 @@ class TLClassifier(object):
         rospy.loginfo("Loading model...")
         rospack = rospkg.RosPack()
         base_path = rospack.get_path('tl_detector') + '/light_classification'
-        self.model = load_model(base_path + '/simulator-mobilenet.h5',
-                                custom_objects = {
-                                    'relu6': mobilenet.relu6,
-                                    'DepthwiseConv2D': mobilenet.DepthwiseConv2D})
+        self.model = load_model(base_path + '/simulator-cnn.h5')
         self.signal_indices = [
             TrafficLight.GREEN,
             TrafficLight.YELLOW,
@@ -54,7 +50,9 @@ class TLClassifier(object):
         resized = cv2.resize(cropped, (224, 224))
 
         # predict
+        start = time.time()
         pred = self.model.predict(resized[None, :, :, :], batch_size=1)
         idx = np.argmax(pred)
+        used = time.time() - start
         
         return self.signal_indices[idx]
