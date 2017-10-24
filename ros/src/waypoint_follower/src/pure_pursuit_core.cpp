@@ -77,7 +77,7 @@ void PurePursuit::calcLookaheadDistance(int waypoint)
                       : ld > maximum_lookahead_distance ? maximum_lookahead_distance
                       : ld ;
 
-  ROS_INFO("lookahead distance: %f",lookahead_distance_);
+  // ROS_INFO("lookahead distance: %f",lookahead_distance_);
 
   return ;
 }
@@ -97,7 +97,7 @@ double PurePursuit::calcCurvature(geometry_msgs::Point target) const
     else
       kappa = -KAPPA_MIN_;
   }
-  ROS_INFO_STREAM("kappa :" << kappa);
+  // ROS_INFO_STREAM("kappa :" << kappa);
   return kappa;
 }
 
@@ -109,11 +109,15 @@ bool PurePursuit::interpolateNextTarget(int next_waypoint, geometry_msgs::Point 
   int path_size = static_cast<int>(current_waypoints_.getSize());
   if (next_waypoint == path_size - 1)
   {
+    ROS_INFO("Next waypoint is the last point.");
     *next_target = current_waypoints_.getWaypointPosition(next_waypoint);
     return true;
   }
   double search_radius = lookahead_distance_;
   geometry_msgs::Point zero_p;
+  // // When the nearest waypoint is far than 2*velocity, the start/end point should shift 1.
+  // if (next_waypoint == 0)
+  //   next_waypoint = 1;
   geometry_msgs::Point end = current_waypoints_.getWaypointPosition(next_waypoint);
   geometry_msgs::Point start = current_waypoints_.getWaypointPosition(next_waypoint - 1);
 
@@ -185,6 +189,7 @@ bool PurePursuit::interpolateNextTarget(int next_waypoint, geometry_msgs::Point 
   // if there is a intersection
   if (d == search_radius)
   {
+    ROS_INFO("d == search_radius");
     *next_target = h;
     return true;
   }
@@ -205,7 +210,8 @@ bool PurePursuit::interpolateNextTarget(int next_waypoint, geometry_msgs::Point 
 
     // ROS_INFO("target1 : ( %lf , %lf , %lf)", target1.x, target1.y, target1.z);
     // ROS_INFO("target2 : ( %lf , %lf , %lf)", target2.x, target2.y, target2.z);
-    //displayLinePoint(a, b, c, target1, target2, h);  // debug tool
+    // ROS_INFO("current: ( %lf , %lf)", current_pose_.pose.position.x, current_pose_.pose.position.y);
+    // displayLinePoint(a, b, c, target1, target2, h);  // debug tool
 
     // check intersection is between end and start
     double interval = getPlaneDistance(end, start);
@@ -257,6 +263,10 @@ geometry_msgs::Twist PurePursuit::calcTwist(double curvature, double cmd_velocit
 
   geometry_msgs::Twist twist;
   twist.linear.x = cmd_velocity;
+  // Transport final position to dbw.
+  twist.angular.x = position_of_next_target_.x;
+  twist.linear.y = position_of_next_target_.y;
+  twist.linear.z = position_of_next_target_.z;  
   if (!following_flag)
   {
     //ROS_ERROR_STREAM("Not following");
@@ -332,11 +342,11 @@ geometry_msgs::TwistStamped PurePursuit::outputTwist(geometry_msgs::Twist t) con
     return twist;
   }
 
-  double max_v = g_lateral_accel_limit / omega;
+  double max_v = g_lateral_accel_limit / fabs(omega);
 
 
   double a = v * omega;
-  ROS_INFO("lateral accel = %lf", a);
+  // ROS_INFO("lateral accel = %lf", a);
 
   twist.twist.linear.x = fabs(a) > g_lateral_accel_limit ? max_v
                     : v;
@@ -376,6 +386,7 @@ geometry_msgs::TwistStamped PurePursuit::go()
   if (!linear_interpolate_ || num_of_next_waypoint_ == 0 ||
       num_of_next_waypoint_ == (static_cast<int>(current_waypoints_.getSize() - 1)))
   {
+    ROS_WARN("Next waypoint is first or last");
     position_of_next_target_ = current_waypoints_.getWaypointPosition(num_of_next_waypoint_);
     return outputTwist(calcTwist(calcCurvature(position_of_next_target_), getCmdVelocity(0)));
   }
