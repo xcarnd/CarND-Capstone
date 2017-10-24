@@ -4,6 +4,7 @@ import socketio
 import eventlet
 import eventlet.wsgi
 import time
+import signal
 from flask import Flask, render_template
 
 from bridge import Bridge
@@ -39,26 +40,43 @@ def telemetry(sid, data):
 
 @sio.on('control')
 def control(sid, data):
-    bridge.publish_controls(data)
-
+    #bridge.publish_controls(data)
+    pass
+    
 @sio.on('obstacle')
 def obstacle(sid, data):
-    bridge.publish_obstacles(data)
+    #bridge.publish_obstacles(data)
+    pass
 
 @sio.on('lidar')
 def obstacle(sid, data):
-    bridge.publish_lidar(data)
+    bridge.publish_lidar(data)  
+    pass
 
 @sio.on('trafficlights')
 def trafficlights(sid, data):
     bridge.publish_traffic(data)
 
+def background_thread():
+    bridge.publish_camera(bridge.image_data)
+
 @sio.on('image')
 def image(sid, data):
-    bridge.publish_camera(data)
+    """
+        The function of `publish_camera` return too slow, so
+        I use `sio.start_background_task()` to run it.
+    """
+    bridge.image_data = data
+    thread = sio.start_background_task(target=background_thread)
+    # bridge.publish_camera(data)
+
+def signal_handler(signum, frame):
+    exit(signum)
 
 if __name__ == '__main__':
 
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
     # wrap Flask application with engineio's middleware
     app = socketio.Middleware(sio, app)
 

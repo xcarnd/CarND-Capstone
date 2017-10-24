@@ -17,9 +17,10 @@ import numpy as np
 from PIL import Image as PIL_Image
 from io import BytesIO
 import base64
+import threading
 
 import math
-
+import time
 TYPE = {
     'bool': Bool,
     'float': Float,
@@ -43,7 +44,7 @@ class Bridge(object):
         self.yaw = None
         self.angular_vel = 0.
         self.bridge = CvBridge()
-
+        self.image_data = None
         self.callbacks = {
             '/vehicle/steering_cmd': self.callback_steering,
             '/vehicle/throttle_cmd': self.callback_throttle,
@@ -175,10 +176,13 @@ class Bridge(object):
         self.publishers['dbw_status'].publish(Bool(data))
 
     def publish_camera(self, data):
+        # base64 string.
         imgString = data["image"]
+        # <class 'PIL.JpegImagePlugin.JpegImageFile'>
         image = PIL_Image.open(BytesIO(base64.b64decode(imgString)))
+        # <type 'numpy.ndarray'> (600, 800, 3)
+        # The np.asarray() costs at least 10ms.
         image_array = np.asarray(image)
-
         image_message = self.bridge.cv2_to_imgmsg(image_array, encoding="rgb8")
         self.publishers['image'].publish(image_message)
 
