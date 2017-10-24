@@ -6,7 +6,7 @@ from sensor_msgs.msg import Image
 import numpy as np
 import time
 
-from keras.models import load_model
+from detector_model import get_model
 import cv2
 
 class TLClassifier(object):
@@ -18,7 +18,7 @@ class TLClassifier(object):
         rospy.loginfo("Loading model...")
         rospack = rospkg.RosPack()
         base_path = rospack.get_path('tl_detector') + '/light_classification'
-        self.model = load_model(base_path + '/simulator-cnn.h5')
+        self.model = get_model(base_path + '/detector_weights.h5')
         self.signal_indices = [
             TrafficLight.GREEN,
             TrafficLight.YELLOW,
