@@ -2,5 +2,6 @@
 <launch>
   <node pkg="tl_detector" type="tl_detector.py" name="tl_detector" output="screen" cwd="node">
     <param name="use_ground_truth" value="false"/>
+    <param name="model_type" value="styx"/>    
   </node>
 </launch>

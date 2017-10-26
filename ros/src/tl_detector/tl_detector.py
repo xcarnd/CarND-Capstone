@@ -4,12 +4,13 @@ from std_msgs.msg import Int32
 from geometry_msgs.msg import PoseStamped, Pose, Point, Quaternion
 from styx_msgs.msg import TrafficLightArray, TrafficLight, TrafficLightState
 from styx_msgs.msg import Lane
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import Image, CameraInfo
 from cv_bridge import CvBridge
 from light_classification.tl_classifier import TLClassifier
 import tf
 import cv2
 import yaml
+import numpy as np
 import math
 from location_utils.locator import WaypointLocator
 
@@ -20,6 +21,7 @@ class TLDetector(object):
         rospy.init_node('tl_detector')
 
         self.use_ground_truth = rospy.get_param("~use_ground_truth", False)
+        self.model_type = rospy.get_param("~model_type", "styx")
 
         self.pose = None
         self.waypoints = None
@@ -34,13 +36,17 @@ class TLDetector(object):
         self.upcoming_light_pub = rospy.Publisher('/traffic_waypoint', TrafficLightState, queue_size=1)
 
         self.bridge = CvBridge()
-        self.light_classifier = TLClassifier()
+        self.light_classifier = TLClassifier(self.model_type)
         self.listener = tf.TransformListener()
 
         self.state = TrafficLight.UNKNOWN
         self.last_state = TrafficLight.UNKNOWN
         self.last_wp = -1
         self.state_count = 0
+
+        self.fov_x = 360 # no limit by default
+
+        self.sub_cam_info = rospy.Subscriber("/camera_info", CameraInfo, self.camera_info_cb, queue_size=1)
 
         sub1 = rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb, queue_size=1)
         sub2 = rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
@@ -56,6 +62,18 @@ class TLDetector(object):
         sub6 = rospy.Subscriber('/image_color', Image, self.image_cb, queue_size=1)
 
         rospy.spin()
+
+    def camera_info_cb(self, msg):
+        # calculate fov in x direction
+        # tan(fov_x/2) = (image_width / 2) / focal_length_x
+        # =>
+        # fov_x = atan(image_width / (2 * focal_length_x)) * 2
+        image_width = 1368 # this is the dimension of x of ouput from /image_raw
+        focal_length_x = msg.K[0]
+        fov_x = math.atan(image_width / (2 * focal_length_x)) * 2
+        self.fov_x = fov_x * 180 / math.pi
+        rospy.logifo("FOV x (in degrees): {}".format(self.fov_x))
+        self.sub_cam_info.unregister()
 
     def pose_cb(self, msg):
         self.pose = msg
@@ -199,31 +217,43 @@ class TLDetector(object):
         # no traffic light ahead
         if min_dist > MAX_EUCLIDEAN_DIST:
             return -1, -1
+
+        # we may have passed the nearest light already. to determine
+        # whether the vehicle is facing to the light, calculate the
+        # angle between the vehicle's heading and the light's facing
+        # direction.
         
-        # the closest one doesn't mean the one ahead
-        # get the stop line position for the light and check
-        # if the vehicle has passed the nearest waypoint
-        # of the stop line. if yes, then we should head for the
-        # next traffic light.
-        #
-        # but in fact we don't have to seek the light ahead in this
-        # case, because the light detector will only detect the
-        # nearest light around the vehicle's current position, the
-        # next traffic light is still out of sight at this moment.
+        # field of view
+        fov_half = self.fov_x / 2
+        vehicle_heading = self.get_heading(self.pose.pose)[:2]
+        light_pos = self.lights[min_idx].pose.pose.position
+        light_from_vehicle = [
+            light_pos.x - self.pose.pose.position.x,
+            light_pos.y - self.pose.pose.position.y]
+        angle = math.acos(
+            self.get_cos_angle_between(vehicle_heading, light_from_vehicle))
+        angle = angle * 180 / math.pi
+        # rospy.loginfo("angle: {}".format(angle * 180 / math.pi))
+        # the light is visible only when it's within the [-fov/2, fov]
+        if angle > fov_half:
+            return -1, -1
+
         x, y = stop_line_positions[min_idx]
         stop_line_pos = Pose(Point(x, y, 0), Quaternion(0, 0, 0, 1))
         wp_stop_line_idx = self.get_closest_waypoint(stop_line_pos)
+
+        # if we've passed the stop line, ignore the traffic light
         if wp_car_pose_idx > wp_stop_line_idx:
             return -1, -1
-        else:
-            # even if the euclidean distance is close enough, we'll
-            # still have to check if they are really close enough by
-            # calculating the distance between the two waypoints.
-            dist = self.waypoint_distance(wp_car_pose_idx, wp_stop_line_idx)
-            rospy.logdebug("Distance to nearest stop line waypoint: {:.2f}".format(dist))
-            if dist > MAX_EUCLIDEAN_DIST:
-                return -1, -1
-            return wp_stop_line_idx, min_idx
+        # even if the euclidean distance is close enough, we'll
+        # still have to check if they are really close enough by
+        # calculating the distance between the two waypoints.
+        dist = self.waypoint_distance(wp_car_pose_idx, wp_stop_line_idx)
+        # rospy.logdebug("Distance to nearest stop line waypoint: {:.2f}".format(dist))
+        if dist > MAX_EUCLIDEAN_DIST:
+            return -1, -1
+
+        return wp_stop_line_idx, min_idx
 
     def dist2d(self, a, b):
         return math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2)
@@ -238,6 +268,18 @@ class TLDetector(object):
             dist += dl(self.waypoints[wp1].pose.pose.position, self.waypoints[i].pose.pose.position)
             wp1 = i
         return dist
+
+    def get_heading(self, pose):
+        q = [pose.orientation.x, pose.orientation.y,
+             pose.orientation.z, pose.orientation.w]
+        heading_q = tf.transformations.quaternion_multiply(
+            tf.transformations.quaternion_multiply(q, [1, 0, 0, 0]),
+            tf.transformations.quaternion_inverse(q))
+        return heading_q[:3]
+
+    def get_cos_angle_between(self, v1, v2):
+        product = np.linalg.norm(v1) * np.linalg.norm(v2)
+        return 1 if product == 0 else np.dot(v1, v2) / product
 
 if __name__ == '__main__':
     try:
