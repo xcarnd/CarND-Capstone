@@ -21,6 +21,10 @@ class TLDetector(object):
         rospy.init_node('tl_detector')
 
         self.use_ground_truth = rospy.get_param("~use_ground_truth", False)
+        if self.use_ground_truth:
+            rospy.loginfo("~use_ground_truth is set to true. Classifier will not be invoked. Ground truth value will be used.")
+        else:
+            rospy.loginfo("~use_ground_truth is set to false. Will invoke classifier to do classification.")
         self.model_type = rospy.get_param("~model_type", "styx")
 
         self.pose = None
@@ -72,7 +76,7 @@ class TLDetector(object):
         focal_length_x = msg.K[0]
         fov_x = math.atan(image_width / (2 * focal_length_x)) * 2
         self.fov_x = fov_x * 180 / math.pi
-        rospy.logifo("FOV x (in degrees): {}".format(self.fov_x))
+        rospy.loginfo("FOV x (in degrees): {}".format(self.fov_x))
         self.sub_cam_info.unregister()
 
     def pose_cb(self, msg):

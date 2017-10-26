@@ -20,7 +20,7 @@ class TLClassifier(object):
             self.model = sim_model.get_model(base_path + '/detector_weights.h5')
         else:
             rospy.loginfo("Loading model for Carla...")
-            import detector_model_carla as carla_model
+            import detector_carla as carla_model
             self.model = carla_model.get_model(base_path + '/detector_carla_weights.h5')
             
         self.signal_indices = [
@@ -57,8 +57,11 @@ class TLClassifier(object):
         else:
             # inputs for Carla are 70 x 192,
             # crop and resize the image
-            cropped = image[0:600, 100:700]
-            inp = cv2.resize(cropped, (70, 192))
+            #
+            # about the magic number 1096: height of image the
+            # /image_raw or /image_color will provides
+            cropped = image[256:1096-338, :]
+            inp = cv2.resize(cropped, (192, 70))
 
         # predict
         start = time.time()
