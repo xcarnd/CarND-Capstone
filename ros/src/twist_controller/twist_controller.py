@@ -11,7 +11,7 @@ ONE_MPH = 0.44704
 class Controller(object):
     def __init__(self, brake_deadband, decel_limit, accel_limit, wheel_radius,
                     wheel_base, steer_ratio, max_lat_accel, max_steer_angle,
-                    vehicle_mass, debug_pub, control_frequency):
+                    vehicle_mass, fuel_capacity, debug_pub, control_frequency):
         self.brake_deadband = brake_deadband
         self.decel_limit    = decel_limit
         self.accel_limit    = accel_limit
@@ -19,6 +19,7 @@ class Controller(object):
         self.steer_ratio = steer_ratio
         self.max_lat_accel = max_lat_accel
         self.vehicle_mass = vehicle_mass
+        self.fuel_capacity = fuel_capacity
         # Is pid controller need to init.
         self.pid_need_init = True
         self.min_speed = 0.1   
@@ -85,8 +86,6 @@ class Controller(object):
         error_velocity_angular = target_va.z - current_va.z
         sample_time = 1.0 / self.control_frequency
         throttle = self.pid_speed.step(error_velocity_linear, sample_time)
-        # Max brake if the velocity is zero. need to optimaze.
-        if target_vl.x == 0: throttle = self.decel_limit 
         angular = self.pid_angle.step(error_velocity_angular, sample_time)
 
         # Translate the wheel angle to steer angle.
@@ -99,13 +98,13 @@ class Controller(object):
         brake = 0
         if throttle < 0:
             if abs(throttle) > self.brake_deadband:
-                brake = abs(throttle) # * self.vehicle_mass * self.wheel_radius
+                brake = abs(throttle) * self.vehicle_mass * self.wheel_radius
             throttle = 0
 
         # Keys are the lengend labels of visual graph.x
         debug_msg = {   
                         'throttle':     throttle,
-                        'brake':        brake, 
+                        'brake/mass':        brake/self.vehicle_mass/self.wheel_radius, 
                         'target_vl.x/7':    target_vl.x / 7.0,
                         'current_vl.x/7':   current_vl.x / 7.0,
                         'wheel*10':     steering / self.steer_ratio*10, 
@@ -113,10 +112,10 @@ class Controller(object):
                         # 'target_va.z*5':  target_va.z*5,
                         # 'current_va.z': current_va.z,  
 
-                        'current_pos_y':current_pos.y,
-                        'current_pos_x':current_pos.x,
-                        'target_pos_x':target_pos.x,
-                        'target_pos_y':target_pos.y,
+                        # 'current_pos_y':current_pos.y,
+                        # 'current_pos_x':current_pos.x,
+                        # 'target_pos_x':target_pos.x,
+                        # 'target_pos_y':target_pos.y,
                     }
         self.debug_publish(debug_msg)
         return throttle, brake, steering 
