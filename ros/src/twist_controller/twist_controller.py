@@ -11,7 +11,7 @@ ONE_MPH = 0.44704
 class Controller(object):
     def __init__(self, brake_deadband, decel_limit, accel_limit, wheel_radius,
                     wheel_base, steer_ratio, max_lat_accel, max_steer_angle,
-                    vehicle_mass, debug_pub):
+                    vehicle_mass, debug_pub, control_frequency):
         self.brake_deadband = brake_deadband
         self.decel_limit    = decel_limit
         self.accel_limit    = accel_limit
@@ -33,6 +33,7 @@ class Controller(object):
         self.yaw_ctl = YawController(wheel_base, steer_ratio, self.min_speed, max_lat_accel, max_steer_angle)
         # For debug visualization.
         self.debug_pub = debug_pub
+        self.control_frequency = control_frequency
         # save the last velocity, for curvature caculation.
         self.last_velocity = 0
 
@@ -56,7 +57,7 @@ class Controller(object):
             self.pid_angle.reset()
             self.pid_need_init = False
             self.last_velocity = current_vl.x
-            rospy.loginfo("PID controller has been initialized.")
+            rospy.loginfo("PID controller ready.")
         
         # The target point is transported by the pure_pursuit Node.
         # I put them into 3 unused position:
@@ -82,8 +83,10 @@ class Controller(object):
             current_va.z = -0.1
         error_velocity_linear = target_vl.x - current_vl.x
         error_velocity_angular = target_va.z - current_va.z
-        sample_time = 1.0/10
+        sample_time = 1.0 / self.control_frequency
         throttle = self.pid_speed.step(error_velocity_linear, sample_time)
+        # Max brake if the velocity is zero. need to optimaze.
+        if target_vl.x == 0: throttle = self.decel_limit 
         angular = self.pid_angle.step(error_velocity_angular, sample_time)
 
         # Translate the wheel angle to steer angle.
@@ -101,11 +104,11 @@ class Controller(object):
 
         # Keys are the lengend labels of visual graph.x
         debug_msg = {   
-                        # 'throttle':     throttle,
-                        # 'brake':        brake, 
-                        # 'target_vl.x/7':    target_vl.x / 7.0,
-                        # 'current_vl.x/7':   current_vl.x / 7.0,
-                        # 'wheel*10':     steering / self.steer_ratio*10, 
+                        'throttle':     throttle,
+                        'brake':        brake, 
+                        'target_vl.x/7':    target_vl.x / 7.0,
+                        'current_vl.x/7':   current_vl.x / 7.0,
+                        'wheel*10':     steering / self.steer_ratio*10, 
                         # 'wheel':     steering / self.steer_ratio, 
                         # 'target_va.z*5':  target_va.z*5,
                         # 'current_va.z': current_va.z,  

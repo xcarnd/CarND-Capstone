@@ -11,7 +11,7 @@ Meet the PAW Patrol Team:
 Name | GitHub | Location | Task
 ------------ | ------------- | ------------- | -------------
 Jelena Kocic (team lead) | @cvetakg | Belgrade, Serbia| Waypoint Uploader Partial
-Zhuhui Chen | @xcarnd | China | Traffic Light Detection - Waypoint publishing, Waypoint Uploader Partial
+Zhuhui Chen | @xcarnd | China | Traffic Light Detection - Detection and Waypoint publishing, Waypoint Uploader Partial
 Haocheng Yang | @cabbagehao | China | DBW Node, Waypoint Uploader Full
 Adarsha Badarinath | @adarshakb | San Francisco Bay Area, CA| Traffic Light Detection - Detection
 Zhenpeng Chen | @IChappie | China | Waypoint Uploader Full

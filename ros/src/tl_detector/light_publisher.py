@@ -14,7 +14,7 @@ import math
 class TLPublisher(object):
     def __init__(self):
         rospy.init_node('tl_publisher')
-
+        self.control_frequency = rospy.get_param('control_frequency', 30)
         self.traffic_light_pubs = rospy.Publisher('/vehicle/traffic_lights', TrafficLightArray, queue_size=1)
 
         light = self.create_light(20.991, 22.837, 1.524, 0.08, 3)
@@ -25,7 +25,7 @@ class TLPublisher(object):
         self.loop()
 
     def loop(self):
-        rate = rospy.Rate(50)
+        rate = rospy.Rate(self.control_frequency)
         while not rospy.is_shutdown():
             self.traffic_light_pubs.publish(self.lights)
             rate.sleep()

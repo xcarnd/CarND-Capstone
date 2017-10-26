@@ -3,6 +3,7 @@
 import rospy
 import math
 import signal
+import time
 from std_msgs.msg import Bool, String
 from styx_msgs.msg import Lane, Waypoint
 from dbw_mkz_msgs.msg import ThrottleCmd, SteeringCmd, BrakeCmd, SteeringReport
@@ -48,6 +49,7 @@ class DBWNode(object):
         #steer_ratio = 2.67
         max_lat_accel = rospy.get_param('~max_lat_accel', 3.)
         max_steer_angle = rospy.get_param('~max_steer_angle', 8.)
+        self.control_frequency = rospy.get_param('~control_frequency', 30)
 
         self.target_velocity = None
         self.current_velocity = None
@@ -67,7 +69,7 @@ class DBWNode(object):
         
         self.controller = Controller(brake_deadband, decel_limit, accel_limit, wheel_radius,
                                         wheel_base, steer_ratio, max_lat_accel, max_steer_angle, 
-                                        vehicle_mass, self.debug_pub)
+                                        vehicle_mass, self.debug_pub, self.control_frequency)
         self.loop()
 
 
@@ -86,7 +88,7 @@ class DBWNode(object):
         self.current_posistion = msg.pose.position
 
     def loop(self):
-        rate = rospy.Rate(10) # 20Hz
+        rate = rospy.Rate(self.control_frequency) # 30Hz
 
         while not (self.target_velocity and self.current_velocity and self.current_posistion):
             # rospy.loginfo("Target_velocity or current_velocity missing.")

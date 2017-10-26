@@ -7,6 +7,8 @@ from std_msgs.msg import String
 
 class Debug_visual():
     def __init__(self, argv):
+        self.control_frequency = rospy.get_param('control_frequency', 30)
+
         self.all_msg = []
         self.legends = []
         print len(argv)
@@ -51,7 +53,7 @@ class Debug_visual():
                 self.all_msg[i] = self.all_msg[i][-self.max_save_size:]
 
     def visual(self):
-        rate = rospy.Rate(50)
+        rate = rospy.Rate(self.control_frequency)
         while len(self.all_msg) == 0: 
             rate.sleep()        
 
