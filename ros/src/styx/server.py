@@ -40,8 +40,7 @@ def telemetry(sid, data):
 
 @sio.on('control')
 def control(sid, data):
-    #bridge.publish_controls(data)
-    pass
+    bridge.publish_controls(data)
     
 @sio.on('obstacle')
 def obstacle(sid, data):
