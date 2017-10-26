@@ -36,7 +36,7 @@ class WaypointUpdater(object):
         self.minimum_detect_distance = 6 + 1
         self.upcoming_traffic_light_wp_idx = -1
         self.traffic_light_state = -1     
-        self.decel_limit = rospy.get_param('~decel_limit', -5)
+        self.decel_limit = abs(rospy.get_param('~decel_limit', -5))
         self.max_num_final_waypoints = rospy.get_param('~max_num_final_waypoints', 100)
         self.final_waypoints = [ Waypoint() for i in range(self.max_num_final_waypoints)]
 
@@ -82,19 +82,18 @@ class WaypointUpdater(object):
             waypoint = self.final_waypoints[i]
             waypoint.pose.pose = ref_waypoint.pose.pose
             waypoint.twist.twist.linear.x = ref_waypoint.twist.twist.linear.x
+            # waypoint.twist.twist.linear.x = 50*1.609344 / 3.6
             waypoint.twist.twist.angular = ref_waypoint.twist.twist.angular
             i += 1
             
         waypoints = self.final_waypoints[:i]
-        waypoints = self.process_traffic_lights(waypoints, idx_ahead, idx_ahead + i-1)
+        waypoints = self.process_traffic_lights(waypoints, idx_ahead, idx_ahead + i-1, msg.pose.position)
 
         final_waypoints = Lane()
         final_waypoints.header.frame_id = "/world"
         final_waypoints.waypoints = waypoints
 
         self.final_waypoints_pub.publish(final_waypoints)
-        # rospy.logwarn_throttle(0.5, "update deal time: %f. i: %d" 
-        #                             %(1000*(end_time-start_time),  i))
         
 
     def waypoints_cb(self, waypoints):
@@ -134,7 +133,6 @@ class WaypointUpdater(object):
     def traffic_cb(self, msg):
         self.upcoming_traffic_light_wp_idx = msg.wp_index
         self.traffic_light_state = msg.state
-        rospy.logwarn_throttle(1, "traffic_light_state: %d" %msg.state)
                                     
     def obstacle_cb(self, msg):
         # TODO: Callback for /obstacle_waypoint message. We will implement it later
@@ -166,7 +164,7 @@ class WaypointUpdater(object):
     def pose_distance_squre(self, a, b):
         return (a.x-b.x)**2 + (a.y-b.y)**2  + (a.z-b.z)**2
 
-    def process_traffic_lights(self, waypoints, start, end):
+    def process_traffic_lights(self, waypoints, start, end, current_position):
         """
             If there is a traffic light in the final waypoints,  this function
             will adjust the waypoints' linear velocity to avoid violation of traffic rules.
@@ -175,25 +173,34 @@ class WaypointUpdater(object):
         """
         light_idx = self.upcoming_traffic_light_wp_idx
         light_state = self.traffic_light_state
-        if not start <= light_idx <= end:
+        if start >= light_idx:
             return waypoints
 
-        stop_wp = waypoints[light_idx - start]
+        stop_wp = self.all_ref_waypoints[light_idx]
+        max_brake_time = 5
+        max_brake_distance = 0.5 * self.decel_limit * max_brake_time**2
+        current_brake_distance = self.current_linear_velocity**2 / (2*self.decel_limit)
+        brake_distance = max(max_brake_distance, current_brake_distance)
         for idx in xrange(len(waypoints)):
             if idx + start >= light_idx:
                 if light_state == TrafficLight.RED:
                     waypoints[idx].twist.twist.linear.x = 0
             else:
-                if light_state == TrafficLight.RED:
-                    # dist = self.pose_distance(waypoints[idx].pose.pose.position, stop_wp.pose.pose.position)
-                    # vel = math.sqrt(2 * abs(self.decel_limit) * dist)
-                    # if vel <  waypoints[idx].twist.twist.linear.x:
-                    #     waypoints[idx].twist.twist.linear.x = vel
-                    # TODO:The velocity cannot control precisely now, so just set target velocity to 0.
-                    waypoints[idx].twist.twist.linear.x = 0
-                elif light_state == TrafficLight.YELLOW:
-                    waypoints[idx].twist.twist.linear.x *= 0.5
+                dist = math.sqrt(self.pose_distance_squre(waypoints[idx].pose.pose.position, stop_wp.pose.pose.position))
+                if dist > brake_distance:
+                    continue
 
+                if light_state == TrafficLight.RED:
+                    vel = 1.3*math.sqrt(dist)
+                    if vel < 2: vel = 0
+                    waypoints[idx].twist.twist.linear.x = min(vel, waypoints[idx].twist.twist.linear.x)
+
+                elif light_state == TrafficLight.YELLOW:
+                    waypoints[idx].twist.twist.linear.x *= 0.8
+        # For debug.
+        stop_line_distance = math.sqrt(self.pose_distance_squre(current_position, stop_wp.pose.pose.position))
+        rospy.loginfo_throttle(0.5, "Light: %d, Target vel: %.1f m/s. Stop line: %.1f m" 
+                %(self.traffic_light_state, waypoints[0].twist.twist.linear.x, stop_line_distance))
         return waypoints
 
 if __name__ == '__main__':
