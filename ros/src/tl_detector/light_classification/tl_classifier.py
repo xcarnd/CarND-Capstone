@@ -55,13 +55,12 @@ class TLClassifier(object):
             cropped = image[0:600, 100:700]
             inp = cv2.resize(cropped, (224, 224))
         else:
-            # inputs for Carla are 70 x 192,
             # crop and resize the image
-            #
-            # about the magic number 1096: height of image the
-            # /image_raw or /image_color will provides
-            cropped = image[256:1096-338, :]
-            inp = cv2.resize(cropped, (192, 70))
+            input_size = (684, 251)
+            rows, cols, _ = image.shape
+            img = cv2.cvtColor(image, cv2.COLOR_BGR2YCrCb)
+            cropped = img[256:rows-338, :]
+            inp = cv2.resize(cropped, (684, 251))
 
         # predict
         start = time.time()
