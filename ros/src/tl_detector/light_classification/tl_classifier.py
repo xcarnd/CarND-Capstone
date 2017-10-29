@@ -16,8 +16,8 @@ class TLClassifier(object):
         base_path = rospack.get_path('tl_detector') + '/light_classification'
         if model_type == 'styx':
             rospy.loginfo("Loading model for simulator...")
-            import detector_model as sim_model
-            self.model = sim_model.get_model(base_path + '/detector_weights.h5')
+            import detector_styx as sim_model
+            self.model = sim_model.get_model(base_path + '/detector_styx_weights.h5')
         else:
             rospy.loginfo("Loading model for Carla...")
             import detector_carla as carla_model
