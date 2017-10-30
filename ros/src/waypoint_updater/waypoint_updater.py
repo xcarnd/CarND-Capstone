@@ -66,7 +66,6 @@ class WaypointUpdater(object):
 
         # Find the reference waypoint ahead first
         _, _, idx_ahead = self.locator.locate_waypoints_around(msg.pose)
-
         i = 0
         while i < self.max_num_final_waypoints:
             idx = idx_ahead + i
