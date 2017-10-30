@@ -28,6 +28,7 @@ class TLDetector(object):
         self.model_type = rospy.get_param("~model_type", "styx")
 
         self.pose = None
+        self.start_detecting_pose = None
         self.waypoints = None
         self.camera_image = None
         self.lights = None
@@ -39,6 +40,8 @@ class TLDetector(object):
 
         self.upcoming_light_pub = rospy.Publisher('/traffic_waypoint', TrafficLightState, queue_size=1)
 
+        self.debug_image_pub = rospy.Publisher('/image_debug', Image, queue_size=1)
+
         self.bridge = CvBridge()
         self.light_classifier = TLClassifier(self.model_type)
         self.listener = tf.TransformListener()
@@ -48,7 +51,10 @@ class TLDetector(object):
         self.last_wp = -1
         self.state_count = 0
 
-        self.fov_x = 360 # no limit by default
+        self.reaching_next_traffic_light = True
+        self.fov_x = 180 # no limit by default
+        self.angle_to_nearest_traffic_light = None
+        self.detection_started = False
 
         self.sub_cam_info = rospy.Subscriber("/camera_info", CameraInfo, self.camera_info_cb, queue_size=1)
 
@@ -89,6 +95,59 @@ class TLDetector(object):
     def traffic_cb(self, msg):
         self.lights = msg.lights
 
+    def publish_debug_image(self):
+        if self.camera_image is None:
+            return
+        # convert image to opencv handlable format
+        image = self.bridge.imgmsg_to_cv2(self.camera_image, "bgr8")
+        # write debug message into the image
+        if self.state == TrafficLight.UNKNOWN:
+            debug_text_traffic_light = "Traffic light detection off."
+            color = (255, 255, 255)
+        elif self.state == TrafficLight.RED:
+            debug_text_traffic_light = "Traffic light: RED."
+            color = (0, 0, 255)
+        elif self.state == TrafficLight.YELLOW:
+            debug_text_traffic_light = "Traffic light: YELLOW."
+            color = (0, 255, 255)
+        elif self.state == TrafficLight.GREEN:
+            debug_text_traffic_light = "Traffic light: GREEN."
+            color = (0, 255, 0)
+
+        cv2.rectangle(image, (0, 0), (1024, 32 * 4 + 10), (0, 0, 0), cv2.FILLED)
+        cv2.putText(image, debug_text_traffic_light, (16, 32),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    1, color, 2)
+        cv2.putText(image,
+                    "Detection started? {}".format(self.detection_started),
+                    (16, 32 * 2),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    1, color, 2)
+        if self.last_wp > -1:
+            cv2.putText(image,
+                        "Stop line wp loc: ({:.2f}, {:.2f}), current pose: ({:.2f}, {:.2f})".format(
+                            self.waypoints[self.last_wp].pose.pose.position.x,
+                            self.waypoints[self.last_wp].pose.pose.position.y,
+                            self.pose.pose.position.x,
+                            self.pose.pose.position.y 
+                        ),
+                        (16, 32 * 3),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        1, color, 2)
+                    
+        if self.angle_to_nearest_traffic_light is not None:
+            cv2.putText(image,
+                        "Angle to nearest traffic light: {:.2f} (FOVx/2={:.2f})".format(
+                            self.angle_to_nearest_traffic_light, self.fov_x / 2),
+                        (16, 32 * 4),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        1, color, 2)
+        
+        image_array = np.asarray(image)
+        msg = self.bridge.cv2_to_imgmsg(image_array, encoding='bgr8')
+        # publish debug topic
+        self.debug_image_pub.publish(msg)
+
     def image_cb(self, msg):
         """Identifies red lights in the incoming camera image and publishes the index
             of the waypoint closest to the red light's stop line to /traffic_waypoint
@@ -119,6 +178,8 @@ class TLDetector(object):
         else:
             self.upcoming_light_pub.publish(TrafficLightState(self.last_wp, self.last_state))
         self.state_count += 1
+        # for debug only
+        self.publish_debug_image()
 
     def get_closest_waypoint(self, pose):
         """Identifies the closest path waypoint to the given position
@@ -170,7 +231,7 @@ class TLDetector(object):
 
         # List of positions that correspond to the line to stop in front of for a given intersection
         stop_line_positions = self.config['stop_line_positions']
-        if(self.pose):
+        if self.pose:
             car_position = self.get_closest_waypoint(self.pose.pose)
         else:
             return -1, TrafficLight.UNKNOWN
@@ -189,6 +250,7 @@ class TLDetector(object):
                 state = light.state
             else:
                 state = self.get_light_state(light)
+                # rospy.loginfo("Detected traffic light state: {}, nearest waypoint index: {}".format(state, wp_idx))
             return wp_idx, state
         return -1, TrafficLight.UNKNOWN
 
@@ -196,7 +258,9 @@ class TLDetector(object):
         # fine to use brute-force searching since the number of
         # traffic lights are quite small.
         # looking for the closest light position
+        self.facing_stop_line = False        
         if self.waypoints is None:
+            # rospy.loginfo("Waypoints not loaded yet")
             return -1, -1
         pose = self.waypoints[wp_car_pose_idx].pose.pose
         min_dist = 1e7
@@ -206,8 +270,6 @@ class TLDetector(object):
             
             pos = Pose(Point(light_pos.x, light_pos.y, 0), Quaternion(0, 0, 0, 1))
             light_wp_idx = self.get_closest_waypoint(pos)
-            if wp_car_pose_idx > light_wp_idx:
-                continue
             
             dist = self.dist2d(pose.position, light_pos)
             if dist < min_dist:
@@ -220,44 +282,80 @@ class TLDetector(object):
         # (specified by MAX_EUCLIDEAN_DIST) , then just report there's
         # no traffic light ahead
         if min_dist > MAX_EUCLIDEAN_DIST:
+            # rospy.loginfo("Distance to the nearest red light: {}. Not close enough".format(min_dist))
             return -1, -1
 
         # we may have passed the nearest light already. to determine
         # whether the vehicle is facing to the light, calculate the
         # angle between the vehicle's heading and the light's facing
         # direction.
-        
+
         # field of view
         fov_half = self.fov_x / 2
         vehicle_heading = self.get_heading(self.pose.pose)[:2]
         light_pos = self.lights[min_idx].pose.pose.position
-        light_from_vehicle = [
-            light_pos.x - self.pose.pose.position.x,
-            light_pos.y - self.pose.pose.position.y]
+        light_from_vehicle = self.make_vector_2d(self.pose.pose.position, light_pos)
+        # rospy.loginfo("Vehicle location: {}, heading: {}, direct: {}".format(self.pose.pose.position, vehicle_heading, light_from_vehicle))
         angle = math.acos(
-            self.get_cos_angle_between(vehicle_heading, light_from_vehicle))
+            self.get_cos_angle_2d(vehicle_heading, light_from_vehicle))
         angle = angle * 180 / math.pi
-        # rospy.loginfo("angle: {}".format(angle * 180 / math.pi))
-        # the light is visible only when it's within the [-fov/2, fov]
-        if angle > fov_half:
+        self.angle_to_nearest_traffic_light = angle
+        # rospy.loginfo("angle: {}".format(self.angle_to_nearest_traffic_light))
+
+        if self.reaching_next_traffic_light and angle <= fov_half:
+            self.detection_started = True
+            self.reaching_next_traffic_light = False
+            self.start_detecting_pose = self.pose
+            rospy.loginfo("Entered FOV. Detection starts.")
+        elif self.detection_started:
+            if angle > fov_half:
+                self.detection_started = False
+                self.start_detecting_pose = None
+                rospy.loginfo("Out of FOV. Stop detection.")
+            else:
+                pass
+                # rospy.loginfo("Detection already started")
+        elif (not self.detection_started) and angle > fov_half:
+            self.reaching_next_traffic_light = True
+            # rospy.loginfo("Not entering FOV. Waiting for reaching next traffic light.")
+        elif (not self.detection_started) and angle <= fov_half:
+            # rospy.loginfo("Waiting for getting out FOV.")
+            pass
+
+        if not self.detection_started:
             return -1, -1
 
         x, y = stop_line_positions[min_idx]
         stop_line_pos = Pose(Point(x, y, 0), Quaternion(0, 0, 0, 1))
         wp_stop_line_idx = self.get_closest_waypoint(stop_line_pos)
+        stop_line_wp = self.waypoints[wp_stop_line_idx]
 
-        # if we've passed the stop line, ignore the traffic light
-        if wp_car_pose_idx > wp_stop_line_idx:
+        v_f = self.get_heading(stop_line_wp.pose.pose)
+        v_stop_line_heading = [-v_f[1], v_f[0]]
+        v_last = self.make_vector_2d(stop_line_wp.pose.pose.position, self.start_detecting_pose.pose.position)
+        v_current = self.make_vector_2d(stop_line_wp.pose.pose.position, self.pose.pose.position)
+        
+        last_side = np.cross(v_stop_line_heading, v_last).take(0)
+        current_side = np.cross(v_stop_line_heading, v_current).take(0)
+        if last_side * current_side < 0 and abs(last_side - current_side) > 1e-5:
+            rospy.loginfo("Vehicle has passed the stop line. Stop detection")
+            self.detection_started = False
+            self.start_detecting_pose = None
             return -1, -1
+
         # even if the euclidean distance is close enough, we'll
         # still have to check if they are really close enough by
         # calculating the distance between the two waypoints.
         dist = self.waypoint_distance(wp_car_pose_idx, wp_stop_line_idx)
-        # rospy.logdebug("Distance to nearest stop line waypoint: {:.2f}".format(dist))
+        # rospy.loginfo("Distance to nearest stop line waypoint: {:.2f}".format(dist))
         if dist > MAX_EUCLIDEAN_DIST:
             return -1, -1
 
+        # rospy.loginfo("Ahead stopline waypoint idx: {}".format(wp_stop_line_idx))
         return wp_stop_line_idx, min_idx
+
+    def make_vector_2d(self, point_from, point_to):
+        return [point_to.x - point_from.x, point_to.y - point_from.y]
 
     def dist2d(self, a, b):
         return math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2)
@@ -281,9 +379,9 @@ class TLDetector(object):
             tf.transformations.quaternion_inverse(q))
         return heading_q[:3]
 
-    def get_cos_angle_between(self, v1, v2):
-        product = np.linalg.norm(v1) * np.linalg.norm(v2)
-        return 1 if product == 0 else np.dot(v1, v2) / product
+    def get_cos_angle_2d(self, v1, v2):
+        product = np.linalg.norm(v1[:2]) * np.linalg.norm(v2[:2])
+        return 1 if product == 0 else np.dot(v1[:2], v2[:2]) / product
 
 if __name__ == '__main__':
     try:
