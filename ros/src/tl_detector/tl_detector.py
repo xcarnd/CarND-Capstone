@@ -179,7 +179,7 @@ class TLDetector(object):
             self.upcoming_light_pub.publish(TrafficLightState(self.last_wp, self.last_state))
         self.state_count += 1
         # for debug only
-        self.publish_debug_image()
+        # self.publish_debug_image()
 
     def get_closest_waypoint(self, pose):
         """Identifies the closest path waypoint to the given position
