@@ -7,14 +7,16 @@ This is the last project for the Udacity Self-Driving Car Nanodegree Program. Al
 
 Meet the PAW Patrol Team: 
 
+![System Integration](/imgs/pawpatrol_resize.png)
+
 
 Name | GitHub | Location | Task
 ------------ | ------------- | ------------- | -------------
 Jelena Kocic (team lead) | @cvetakg | Belgrade, Serbia| Waypoint Uploader Partial
-Zhuhui Chen | @xcarnd | China | Traffic Light Detection - Detection and Waypoint publishing, Waypoint Uploader Partial
-Haocheng Yang | @cabbagehao | China | DBW Node, Waypoint Uploader Full
+Zhuhui Chen | @xcarnd | Guangzhou, China | Traffic Light Detection - Detection and Waypoint publishing, Waypoint Uploader Partial
+Haocheng Yang | @cabbagehao | Shenzhen, China | DBW Node, Waypoint Uploader Full
 Adarsha Badarinath | @adarshakb | San Francisco Bay Area, CA| Traffic Light Detection - Detection
-Zhenpeng Chen | @IChappie | China | Waypoint Uploader Full
+Zhenpeng Chen | @IChappie | Shenzhen, China | Waypoint Uploader Full
 
 # The Scope
 
@@ -25,6 +27,22 @@ The capstone project has an aim that each team make a program for a real Self-Dr
 ![System Integration](/imgs/final-project-ros-graph-v2.png)
 
 
+## Results
+
+
+### Normal drive:
+
+![System Integration](/imgs/1.png)
+
+
+### Car stops on red light:
+
+![System Integration](/imgs/2.png)
+
+
+### Car pass on green light:
+
+![System Integration](/imgs/3.png)
 
 
 ## Instalation
