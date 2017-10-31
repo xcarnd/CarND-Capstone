@@ -151,9 +151,11 @@ stop line for the traffic light.
 Below are the architectures for the two models.
 
 + Model for simulator
+
 ![Model for simulator](/imgs/model_styx.png)
 
 + Model for Carla
+
 ![Model for Carla](/imgs/model_carla.png)
 
 #### Model training
