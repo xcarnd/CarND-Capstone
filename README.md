@@ -16,7 +16,7 @@ Jelena Kocic (team lead) | @cvetakg | Belgrade, Serbia| Waypoint Uploader Partia
 Zhuhui Chen | @xcarnd | Guangzhou, China | Traffic Light Detection - Detection and Waypoint publishing, Waypoint Uploader Partial
 Haocheng Yang | @cabbagehao | Shenzhen, China | DBW Node, Waypoint Uploader Full
 Adarsha Badarinath | @adarshakb | San Francisco Bay Area, CA| Traffic Light Detection - Detection
-Zhenpeng Chen | @IChappie | Shenzhen, China | Waypoint Uploader Full
+Zhenpeng Chen | @IChappie | Guangzhou, China | Waypoint Uploader Full
 
 # The Scope
 
