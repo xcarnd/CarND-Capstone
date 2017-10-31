@@ -81,7 +81,7 @@ class TLDetector(object):
         image_width = 1368 # this is the dimension of x of ouput from /image_raw
         focal_length_x = msg.K[0]
         fov_x = math.atan(image_width / (2 * focal_length_x)) * 2
-        self.fov_x = fov_x * 180 / math.pi
+        self.fov_x = fov_x * 180 / math.pi + 5 # added a little buffer (+-2.5 degrees)
         rospy.loginfo("FOV x (in degrees): {}".format(self.fov_x))
         self.sub_cam_info.unregister()
 
