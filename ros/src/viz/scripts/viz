@@ -9,7 +9,7 @@ from std_msgs.msg import Header, Int32, Time
 from geometry_msgs.msg import Point, Quaternion, PoseStamped
 from styx_msgs.msg import Lane, Waypoint, TrafficLightState
 from nav_msgs.msg import Path
-from waypoint_locator.srv import *
+from location_utils.locator import WaypointLocator
 import yaml
 
 class Viz(object):
@@ -40,8 +40,8 @@ class Viz(object):
         # the last pose for detected red traffic
         self.pose_red_light_idx = None
 
-        self.locate_waypoints_around = rospy.ServiceProxy('/waypoint_locator/locate_waypoints_around', LocateWaypointsAround)
-
+        self.locator = None
+        
         rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb, queue_size=1)
         rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb, queue_size=1)
         rospy.Subscriber('/final_waypoints', Lane, self.final_waypoints_cb, queue_size=1, buff_size=100000)
@@ -53,9 +53,6 @@ class Viz(object):
         self.viz_waypoints_around_pub = rospy.Publisher('viz_waypoints_around', Marker, queue_size=1)
         self.viz_current_path_pub = rospy.Publisher('viz_current_path', Path, queue_size=1)
         self.viz_red_light_pub = rospy.Publisher('viz_red_light_stop', Marker, queue_size=1)
-
-        rospy.wait_for_service('/waypoint_locator/locate_waypoints_around')
-
         rospy.spin()
 
     def viz_time_seq_cb(self, msg):
@@ -126,10 +123,9 @@ class Viz(object):
         if self.last_pose is None:
             return
         
-        req = LocateWaypointsAroundRequest(self.last_pose.pose)
-        resp = self.locate_waypoints_around(req)
-        if resp.behind >= 0 and resp.ahead >= 0:
-            self.pose_ref_waypoints_idx = (resp.behind, resp.ahead)
+        _, behind, ahead = self.locator.locate_waypoints_around(self.last_pose.pose)
+        if behind >= 0 and ahead >= 0:
+            self.pose_ref_waypoints_idx = (behind, ahead)
         else:
             self.pose_ref_waypoints_idx = None
 
@@ -216,6 +212,7 @@ class Viz(object):
         waypoints = waypoints.waypoints
         for waypoint in waypoints:
             self.all_ref_waypoints.append(waypoint)
+        self.locator = WaypointLocator(self.all_ref_waypoints)
         print("Base waypoints received")
 
     def get_pose_stamped(self, position, orientation):
