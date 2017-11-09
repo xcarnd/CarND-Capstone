@@ -65,6 +65,39 @@ class WaypointLocator(object):
         nearest, behind, ahead = (ca1 > ca2) and (j, i, j) or (j, j, k)
         return nearest, behind, ahead
 
+    def next_waypoint(self, wp_idx):
+        # to avoid the overlapping waypoints, calculate the angle
+        # between last checked waypoint's heading and the vector
+        # from last checked waypoint to the currently checking
+        # waypoint. if the angle is > 90 (cos value < 0), head for
+        # the next waypoint
+        num_all_ref_waypoints = len(self.all_ref_waypoints)
+        current_wp = self.all_ref_waypoints[wp_idx]
+        while True:
+            next_wp_idx = wp_idx + 1
+            if next_wp_idx >= num_all_ref_waypoints:
+                next_wp_idx -= num_all_ref_waypoints
+            next_wp = self.all_ref_waypoints[next_wp_idx]
+            
+            current_wp_orient = self.get_heading(current_wp.pose.pose)[:2]
+            vec_current_to_next = self.make_vector_2d(current_wp.pose.pose.position,
+                                                      next_wp.pose.pose.position)
+            cos_angle = self.get_cos_angle_between(current_wp_orient,
+                                                   vec_current_to_next)
+            if cos_angle > 0:
+                return next_wp_idx
+            
+    def make_vector_2d(self, point_from, point_to):
+        return [point_to.x - point_from.x, point_to.y - point_from.y]
+    
+    def get_heading(self, pose):
+        q = [pose.orientation.x, pose.orientation.y,
+             pose.orientation.z, pose.orientation.w]
+        heading_q = tf.transformations.quaternion_multiply(
+            tf.transformations.quaternion_multiply(q, [1, 0, 0, 0]),
+            tf.transformations.quaternion_inverse(q))
+        return heading_q[:3]
+
     def get_cos_angle_between(self, v1, v2):
         product = np.linalg.norm(v1) * np.linalg.norm(v2)
         return 1 if product == 0 else np.dot(v1, v2) / product
