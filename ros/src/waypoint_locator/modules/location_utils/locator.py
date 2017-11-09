@@ -73,8 +73,9 @@ class WaypointLocator(object):
         # the next waypoint
         num_all_ref_waypoints = len(self.all_ref_waypoints)
         current_wp = self.all_ref_waypoints[wp_idx]
+        next_wp_idx = wp_idx
         while True:
-            next_wp_idx = wp_idx + 1
+            next_wp_idx += 1
             if next_wp_idx >= num_all_ref_waypoints:
                 next_wp_idx -= num_all_ref_waypoints
             next_wp = self.all_ref_waypoints[next_wp_idx]
