@@ -65,11 +65,12 @@ class WaypointUpdater(object):
         detect_distance_squre = detect_distance**2
 
         # Find the reference waypoint ahead first
-        _, idx_behind, idx_ahead = self.locator.locate_waypoints_around(msg.pose)
+        _, _, idx_ahead = self.locator.locate_waypoints_around(msg.pose)
         i = 0
-        idx = idx_behind
         while i < self.max_num_final_waypoints:
-            idx = self.next_waypoint(idx)
+            idx = idx_ahead + i
+            if idx >= num_all_ref_waypoints:
+                idx -= num_all_ref_waypoints
             ref_waypoint = self.all_ref_waypoints[idx]
             wp_position = ref_waypoint.pose.pose.position
             distance_squre = self.pose_distance_squre(msg.pose.position, wp_position)
