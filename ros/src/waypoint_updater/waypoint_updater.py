@@ -64,8 +64,13 @@ class WaypointUpdater(object):
             detect_distance = self.minimum_detect_distance 
         detect_distance_squre = detect_distance**2
 
+        # hyper parameter: acceleration
+        accel = 3
+
         # Find the reference waypoint ahead first
         _, _, idx_ahead = self.locator.locate_waypoints_around(msg.pose)
+
+        prev_pose = msg.pose
         i = 0
         while i < self.max_num_final_waypoints:
             idx = idx_ahead + i
@@ -80,7 +85,21 @@ class WaypointUpdater(object):
 
             waypoint = self.final_waypoints[i]
             waypoint.pose.pose = ref_waypoint.pose.pose
-            waypoint.twist.twist.linear.x = ref_waypoint.twist.twist.linear.x
+            # calculate distance between the previous set waypoint and the current setting waypoint
+            # with accel, we can get how much time to spend, and then the new reference velocity
+            # for the current setting waypoint.
+            #
+            dist = self.euclidean_dist_2d(prev_pose, waypoint.pose)
+            v0 = self.current_linear_velocity
+            # s = v0 * t + 0.5 * a * t ** 2 --> t = (-v0 + sqrt(v0**2 + 2 * s)) / (2 * a)
+            t = (-v0 + math.sqrt(v0**2 + 2 * dist)) / (2 * accel)
+            v_target = v0 + accel * t
+            v_ref = math.sqrt(ref_waypoint.twist.twist.linear.x ** 2 + ref_waypoint.twist.twist.linear.y ** 2)
+            v_set = min(v_target, v_ref)
+            v_ratio = v_set / v_ref
+            
+            waypoint.twist.twist.linear.x = ref_waypoint.twist.twist.linear.x * v_ratio
+            waypoint.twist.twist.linear.y = ref_waypoint.twist.twist.linear.y * v_ratio
             # waypoint.twist.twist.linear.x = 50*1.609344 / 3.6
             waypoint.twist.twist.angular = ref_waypoint.twist.twist.angular
             i += 1
@@ -93,7 +112,11 @@ class WaypointUpdater(object):
         final_waypoints.waypoints = waypoints
 
         self.final_waypoints_pub.publish(final_waypoints)
-        
+
+    def euclidean_dist_2d(self, pose1, pose2):
+        p1 = pose1.pose.position
+        p2 = pose2.pose.position
+        return math.sqrt((p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2)
 
     def waypoints_cb(self, waypoints):
         self.all_ref_waypoints = waypoints.waypoints
