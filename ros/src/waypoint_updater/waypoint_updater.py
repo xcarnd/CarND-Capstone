@@ -103,6 +103,7 @@ class WaypointUpdater(object):
             # waypoint.twist.twist.linear.x = 50*1.609344 / 3.6
             waypoint.twist.twist.angular = ref_waypoint.twist.twist.angular
             i += 1
+            prev_pose = waypoint.pose
             
         waypoints = self.final_waypoints[:i]
         waypoints = self.process_traffic_lights(waypoints, idx_ahead, idx_ahead + i-1, msg.pose.position)
