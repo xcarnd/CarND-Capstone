@@ -21,11 +21,11 @@ Zhenpeng Chen | @IChappie | Guangzhou, China | Waypoint Uploader Full
 # The Scope
 
 The capstone project has an aim that each team make a program for a real Self-Driving Car, the Carla. Program was written on Ubuntu Linux, under Robotic Operating System (ROS) using Python. Development and the tests are done using Udacity simulator for the system integration project. And the code is going to be putted in the car and tested in the real conditions!  
-## What we have done  
-     1. The vehicle can run stably and complete the entire road(7KM).  
-     2. The vehicle can accurately recognize the state and position of traffic lights.
-     3. The vehicle will stop at the red light and pass by the green light  
-     4. The vehicle can be taken over half way, and continue after canceling the takeover.  
+## What we have done
+   1. The vehicle can run stably and complete the entire road(7KM).  
+   2. The vehicle can accurately recognize the state and position of traffic lights.
+   3. The vehicle will stop at the red light and pass by the green light  
+   4. The vehicle can be taken over half way, and continue after canceling the takeover.  
 
 ![System Integration](/imgs/P1.png)
 
@@ -215,16 +215,16 @@ real world).
 ### What problems we have encountered?  
 1. **The vehicle stopped or ran out of control after a few minutes of normal driving  (performance issues)**
 
-        1. waypointUpdater release final waypoint was time-consuming:  
+      1. waypointUpdater release final waypoint was time-consuming:  
                 Reduced the number of publications   
                 Reused waypoints object list instead of create new object each time.  
                 Used distance squared rather than distance.  
                 canceled the use of lambda (lambda slightly affect performance)  
  
-        2. waypointUpdater used a service to find the closed waypoint, which leaded to greater delay:  
+      2. waypointUpdater used a service to find the closed waypoint, which leaded to greater delay:  
                 Used python module instead of service. Service is not suitable for frequent calls.  
 
-        3. In server image callback function, the operation of np.asarray () takes more than 10ms  
+      3. In server image callback function, the operation of np.asarray () takes more than 10ms  
                 solution:  
                     Used a pre-function of start_background_task () before the callback function of image for asynchronous operations   
                 Failed attempt:  
@@ -233,10 +233,10 @@ real world).
                     3. Set the server asynchronous mode  
                     4. Set topic buffer size  
                     5. Have considered shared memory / delay conversion, it involves changes to the server interface, so I gave up.  
-        4. Canceled all unnecessary log printing  
+      4. Canceled all unnecessary log printing  
 
 
-    2. **Acceleration and braking are not accurate(stability problem)  **
+    2. **Acceleration and braking are not accurate(stability problem)**
     
         Solution:  
             1. Throttle and barke can not publish at the same time, even if a certain value is 0.  
@@ -249,10 +249,11 @@ real world).
     3. **The vehicle target speed was sometimes negative**  
         Modified persuit in the speed calculation. Added a fabs () to solve.  
 
-    4. **The vehicle can not stop precisly before the red light. ** 
-        1. Using a linear function of distance to set the target speed starts braking a long way and may not stop when approaching the target point.    
-        2. So I used a sqrt function instead, it converges to 0 more quickly as it approaches the target.     
-        3. Set the target speed to 0 directly when the target speed is <3.   
+    4. **The vehicle can not stop precisly before the red light.**  
+    
+      1. Using a linear function of distance to set the target speed starts braking a long way and may not stop when approaching the target point.    
+      2. So I used a sqrt function instead, it converges to 0 more quickly as it approaches the target.     
+      3. Set the target speed to 0 directly when the target speed is <3.   
         
         
         
