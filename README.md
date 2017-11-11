@@ -21,11 +21,11 @@ Zhenpeng Chen | @IChappie | Guangzhou, China | Waypoint Uploader Full
 # The Scope
 
 The capstone project has an aim that each team make a program for a real Self-Driving Car, the Carla. Program was written on Ubuntu Linux, under Robotic Operating System (ROS) using Python. Development and the tests are done using Udacity simulator for the system integration project. And the code is going to be putted in the car and tested in the real conditions!  
-## What we have done
-     1. The vehicle can run stably and complete the entire road(7KM).
-     2. The vehicle can accurately recognize the state and position of traffic lights.
-     3. The vehicle will stop at the red light and pass by the green light
-     4. The vehicle can be taken over half way, and continue after canceling the takeover.
+## What we have done  
+     1. The vehicle can run stably and complete the entire road(7KM).  
+     2. The vehicle can accurately recognize the state and position of traffic lights.  
+     3. The vehicle will stop at the red light and pass by the green light  
+     4. The vehicle can be taken over half way, and continue after canceling the takeover.  
 
 ![System Integration](/imgs/P1.png)
 
@@ -51,16 +51,16 @@ The capstone project has an aim that each team make a program for a real Self-Dr
 
 ### Performance result:
 
-Test environment: 
-    Intel E5-2640 + 8G RAM + GTX1050Ti GPU
-    Ubuntu16.04 + ROS-kinetic
- 0. Module delay: (the runtime of main callback function )
-     *server* and *WayPointUpdater* delay below 5ms
-     *WaypointFollower*,*TLDetector*and*DBWNode* delay below 0.5ms
- 1. Stable control at **30HZ**. 
- 2. The vehicle can complete the entire road at the maximum of **170km/h** (The best speed is 40km/h, PID parameters are adjusted according to this.)
- 3. The *average distance error* is **less than 30cm** when the vehicle finish the circle at 40km/h. (Measured by the distance to get the nearest waypoint every time)
- 4. The vehicle can stop in front of the red light line **within 1.5m** when running at the speed of 40km/h. 
+Test environment:   
+    Intel E5-2640 + 8G RAM + GTX1050Ti GPU  
+    Ubuntu16.04 + ROS-kinetic  
+ 1. Module delay: (the runtime of main callback function )  
+     *server* and *WayPointUpdater* delay below 5ms  
+     *WaypointFollower*,*TLDetector*and*DBWNode* delay below 0.5ms  
+ 2. Stable control at **30HZ**.   
+ 3. The vehicle can complete the entire road at the maximum of **170km/h** (The best speed is 40km/h, PID parameters are adjusted according to this.)  
+ 4. The *average distance error* is **less than 30cm** when the vehicle finish the circle at 40km/h. (Measured by the distance to get the nearest waypoint every time)  
+ 5. The vehicle can stop in front of the red light line **within 1.5m** when running at the speed of 40km/h.   
     
 ## Instalation
 
@@ -212,46 +212,47 @@ detection networks, such as YOLO and SSD, and use transfer learning to
 make them fitting the needs for driving Carla (both in simulator and
 real world).
 
-### What problems we have encountered?
-1. The vehicle stopped or ran out of control after a few minutes of normal driving
-        **Performance issues**
-        1. waypointUpdater release final waypoint was time-consuming:
-                Reduced the number of publications
-                Reused waypoints object list instead of create new object each time.
-                Used distance squared rather than distance.
-                canceled the use of lambda (lambda slightly affect performance)
+### What problems we have encountered?  
+1. The vehicle stopped or ran out of control after a few minutes of normal driving  
+        **Performance issues**  
+        1. waypointUpdater release final waypoint was time-consuming:  
+                Reduced the number of publications  
+                Reused waypoints object list instead of create new object each time.  
+                Used distance squared rather than distance.  
+                canceled the use of lambda (lambda slightly affect performance)  
+ 
+        2. waypointUpdater used a service to find the closed waypoint, which leaded to greater delay:  
+                Used python module instead of service. Service is not suitable for frequent calls.  
 
-        2. waypointUpdater used a service to find the closed waypoint, which leaded to greater delay:
-                Used python module instead of service. Service is not suitable for frequent calls.
-
-        3. In server image callback function, the operation of np.asarray () takes more than 10ms
-                Successful approach:
-                    Used a pre-function of start_background_task () before the callback function of image for asynchronous operations
-                Failed attempt:
-                    1. Used python multithreading
-                    2. Used other numpy functions instead of np.asarray's conversion
-                    3. Set the server asynchronous mode
-                    4. Set topic buffer size
-                    5. Have considered shared memory / delay conversion, it involves changes to the server interface, so I gave up.
-        4. Canceled all unnecessary log printing
+        3. In server image callback function, the operation of np.asarray () takes more than 10ms  
+                Successful approach:  
+                    Used a pre-function of start_background_task () before the callback function of image for asynchronous operations   
+                Failed attempt:  
+                    1. Used python multithreading  
+                    2. Used other numpy functions instead of np.asarray's conversion  
+                    3. Set the server asynchronous mode  
+                    4. Set topic buffer size  
+                    5. Have considered shared memory / delay conversion, it involves changes to the server interface, so I gave up.  
+        4. Canceled all unnecessary log printing  
 
 
-    Acceleration and braking are not accurate
-        **Stability problem**
-        Solution:
-            Throttle and barke can not publish at the same time, even if a certain value is 0.
-            Throttle is the percentage used, the brakes use torque, and the torque is multiplied by the vehicle mass and wheelbase
-        Failed attempt:
-            1. Adjust PID
-            2. Set the system delay
+    2. Acceleration and braking are not accurate  
+        **Stability problem**  
+        Solution:  
+            Throttle and barke can not publish at the same time, even if a certain value is 0.  
+            Throttle is the percentage used, the brakes use torque, and the torque is multiplied by the vehicle mass and wheelbase  
+        Failed attempt:  
+            1. Adjust PID  
+            2. Set the system delay  
 
-    3. The vehicle target speed was sometimes negative
-        Modified persuit in the speed calculation. Added a fabs () to solve.
+    3. The vehicle target speed was sometimes negative  
+        Modified persuit in the speed calculation. Added a fabs () to solve.  
 
-    4. The vehicle can not stop precisly before the red light.
-        Using a linear function of distance to set the target speed starts braking a long way and may not stop when approaching the target point.
-        So I used a sqrt function instead, it converges to 0 more quickly as it approaches the target. 
-        Set the target speed to 0 directly when the target speed is <3.
+    4. The vehicle can not stop precisly before the red light.  
+        Using a linear function of distance to set the target speed starts braking a long way and may not stop when approaching the target point.  
+        So I used a sqrt function instead, it converges to 0 more quickly as it approaches the target.   
+        Set the target speed to 0 directly when the target speed is <3.  
+        
         
         
         
