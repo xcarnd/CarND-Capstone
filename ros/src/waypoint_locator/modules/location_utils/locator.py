@@ -16,6 +16,7 @@ class WaypointLocator(object):
         self.kdtree = None
 
         all_ref_waypoints = []
+        base_waypoints = self.deal_base_waypoints_overlap(base_waypoints)
         waypoints = base_waypoints
         xy_pairs = []
         previous_waypoint = None
@@ -35,6 +36,27 @@ class WaypointLocator(object):
                 
         self.kdtree = cKDTree(xy_pairs)
         self.all_ref_waypoints = all_ref_waypoints
+
+    def deal_base_waypoints_overlap(self, base_waypoints):
+        # The shape of base_waypoints should be a circle.
+        # Make sure there is a smooth joint between the last and first waypoint.
+        first_wp_pos = base_waypoints[0].pose.pose.position
+        second_wp_pos = base_waypoints[1].pose.pose.position
+        vector_start_2nd = (second_wp_pos.x - first_wp_pos.x, second_wp_pos.y - first_wp_pos.y)
+        end_idx = -1
+        for i in range(len(base_waypoints)-1, len(base_waypoints) / 2, -1):
+            search_pos = base_waypoints[i].pose.pose.position
+            vector_1st_last = (search_pos.x - first_wp_pos.x, search_pos.y - first_wp_pos.y)
+            if np.dot(vector_start_2nd, vector_1st_last) < 0:
+                if self.dist2d(base_waypoints[0], base_waypoints[i]) < 15:
+                    end_idx = i
+                    break
+                    
+        if end_idx == -1:
+            print "Base waypoints haven't overlap, leave alnoe."
+            return base_waypoints
+        else:
+            return base_waypoints[:end_idx+1]
 
     def locate_waypoints_around(self, pose):
         # use kdtree for looking up the closest waypoint
