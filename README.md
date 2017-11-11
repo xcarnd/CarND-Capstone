@@ -23,7 +23,7 @@ Zhenpeng Chen | @IChappie | Guangzhou, China | Waypoint Uploader Full
 The capstone project has an aim that each team make a program for a real Self-Driving Car, the Carla. Program was written on Ubuntu Linux, under Robotic Operating System (ROS) using Python. Development and the tests are done using Udacity simulator for the system integration project. And the code is going to be putted in the car and tested in the real conditions!  
 ## What we have done  
      1. The vehicle can run stably and complete the entire road(7KM).  
-     2. The vehicle can accurately recognize the state and position of traffic lights.  
+     2. The vehicle can accurately recognize the state and position of traffic lights.
      3. The vehicle will stop at the red light and pass by the green light  
      4. The vehicle can be taken over half way, and continue after canceling the takeover.  
 
@@ -51,9 +51,9 @@ The capstone project has an aim that each team make a program for a real Self-Dr
 
 ### Performance result:
 
-Test environment:   
-    Intel E5-2640 + 8G RAM + GTX1050Ti GPU  
-    Ubuntu16.04 + ROS-kinetic  
+> Test environment:   
+>     Intel E5-2640 + 8G RAM + GTX1050Ti GPU  
+>     Ubuntu16.04 + ROS-kinetic  
  1. Module delay: (the runtime of main callback function )  
      *server* and *WayPointUpdater* delay below 5ms  
      *WaypointFollower*,*TLDetector*and*DBWNode* delay below 0.5ms  
@@ -213,11 +213,11 @@ make them fitting the needs for driving Carla (both in simulator and
 real world).
 
 ### What problems we have encountered?  
-1. The vehicle stopped or ran out of control after a few minutes of normal driving  
-        **Performance issues**  
-        1. waypointUpdater release final waypoint was time-consuming:  
-                Reduced the number of publications  
-                Reused waypoints object list instead of create new object each time.  
+1. The vehicle stopped or ran out of control after a few minutes of normal driving  (performance issues)
+
+        1. waypointUpdater release final waypoint was time-consuming:  
+                Reduced the number of publications   
+                Reused waypoints object list instead of create new object each time.  
                 Used distance squared rather than distance.  
                 canceled the use of lambda (lambda slightly affect performance)  
  
@@ -225,7 +225,7 @@ real world).
                 Used python module instead of service. Service is not suitable for frequent calls.  
 
         3. In server image callback function, the operation of np.asarray () takes more than 10ms  
-                Successful approach:  
+                solution:  
                     Used a pre-function of start_background_task () before the callback function of image for asynchronous operations   
                 Failed attempt:  
                     1. Used python multithreading  
@@ -236,8 +236,8 @@ real world).
         4. Canceled all unnecessary log printing  
 
 
-    2. Acceleration and braking are not accurate  
-        **Stability problem**  
+    2. Acceleration and braking are not accurate(stability problem)  
+    
         Solution:  
             Throttle and barke can not publish at the same time, even if a certain value is 0.  
             Throttle is the percentage used, the brakes use torque, and the torque is multiplied by the vehicle mass and wheelbase  
