@@ -213,7 +213,7 @@ make them fitting the needs for driving Carla (both in simulator and
 real world).
 
 ### What problems we have encountered?  
-1. The vehicle stopped or ran out of control after a few minutes of normal driving  (performance issues)
+1. **The vehicle stopped or ran out of control after a few minutes of normal driving  (performance issues)**
 
         1. waypointUpdater release final waypoint was time-consuming:  
                 Reduced the number of publications   
@@ -236,22 +236,23 @@ real world).
         4. Canceled all unnecessary log printing  
 
 
-    2. Acceleration and braking are not accurate(stability problem)  
+    2. **Acceleration and braking are not accurate(stability problem)  **
     
         Solution:  
-            Throttle and barke can not publish at the same time, even if a certain value is 0.  
-            Throttle is the percentage used, the brakes use torque, and the torque is multiplied by the vehicle mass and wheelbase  
+            1. Throttle and barke can not publish at the same time, even if a certain value is 0.  
+            2. Throttle is the percentage used, the brakes use torque, take care of it.
+            3. The torque is multiplied by the vehicle mass and wheelbase.
         Failed attempt:  
             1. Adjust PID  
             2. Set the system delay  
 
-    3. The vehicle target speed was sometimes negative  
+    3. **The vehicle target speed was sometimes negative**  
         Modified persuit in the speed calculation. Added a fabs () to solve.  
 
-    4. The vehicle can not stop precisly before the red light.  
-        Using a linear function of distance to set the target speed starts braking a long way and may not stop when approaching the target point.  
-        So I used a sqrt function instead, it converges to 0 more quickly as it approaches the target.   
-        Set the target speed to 0 directly when the target speed is <3.  
+    4. **The vehicle can not stop precisly before the red light. ** 
+        1. Using a linear function of distance to set the target speed starts braking a long way and may not stop when approaching the target point.    
+        2. So I used a sqrt function instead, it converges to 0 more quickly as it approaches the target.     
+        3. Set the target speed to 0 directly when the target speed is <3.   
         
         
         
