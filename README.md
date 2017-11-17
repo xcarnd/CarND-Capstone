@@ -139,41 +139,46 @@ roslaunch launch/site.launch
 
 ### Approach for traffic light detection
 
-We currently trained CNNs and use them for traffic light detection
-problem. Because of the difference between the image captured in
-simulator and in Carla, we've trained two separate models, one for the
-simulator and the other for Carla.
+We've used two different approaches for traffic light detection.
 
-The models we used are largely inspired by the NVidia architecture
-introduced in Term1 Project3. The main idea is, when an image is
-coming, we use the model and classify the image as either containing
-red light, yellow light or green light. We don't train the model to
-recognize "no lights" because we're training a model from scratch and
-we don't have enough samples for the ambient (especially when
-trainning models for Carla).
+For simulator, we currently trained CNNs and use them for traffic
+light detection problem. The models we used are largely inspired by
+the NVidia architecture introduced in Term1 Project3. The main idea
+is, when an image is coming, we use the model and classify the image
+as either containing red light, yellow light or green light. We don't
+train the model to recognize "no lights" because we're training a
+model from scratch and we don't have enough samples for the ambient
+(especially when trainning models for Carla).
 
 Because of this, the model cannot give out meaningful results when
 there's no light in sight. To avoid uncessary detection (and thus
 meaningless wrong detection results), the detector will be activated
 only if the current position of the vehicle is close enough to a
-traffic light, e.g., 100M. For Carla, we also use the camera info to
-calculate the FOV in horizontal direction, and check if the nearest
-traffic light is within the range of FOV. It turns out the FOV
-criteria is not very accurate, but good enough to filter out the major
-case when Carla is not facing to the traffic light.
+traffic light, e.g., 100M.
+
+For Carla, we've used the tensorflow's object detection api to achieve
+the goal. More specifically, we've finetuned a Faster-RCNN network and
+use it to detect whether there's a light in the captured image, where
+is it (bounding box) and what color is it. To make the network
+inferencing fast enough, we've followed advice for slack channel and
+make the RPN proposals of the network to 4.
+
+To further avoid unecessary detections, we've assumed the camera in
+both cases (simulator and Carla) has 180 degrees FOV in the horizontal
+direction, and only perform detection when the traffic light is within
+the FOV. Although simple, FOV is still good enough to filter out the
+major case when vehicle is not facing to the traffic light.
 
 We also stop detection once the vehicle has passed the corresponding
 stop line for the traffic light.
 
-Below are the architectures for the two models.
-
-+ Model for simulator
+Below is the architecture used in simulator.
 
 ![Model for simulator](/imgs/model_styx.png)
 
-+ Model for Carla
+Below is an annotated output made by the Faster-RCNN network.
 
-![Model for Carla](/imgs/model_carla.png)
+![Faster-RCNN Annotated output](/imgs/faster_rcnn_annotated.jpg)
 
 #### Model training
 
@@ -189,28 +194,23 @@ simulator.
 With these samples we're able to train a model with 99%+
 train/validation accuracy and about 92% test accuracy.
 
-For Calar, we used a similar strategy for preparing samples: we
-extract training set from one of the rosbag Udacity has provided and
-extract testing set from the other one. Images from real scene are
-more complicated than those in the simulator, so we applied more
-augmentation to the train set we've extracted, including scaling and
-changing brightness. We augmented the training set from about 500
-samples to 15000 samples.
-
-The training/valid accuracy for Carla's model is also 99+%. For
-testing accuracy, we archive complete correct for the red/green lights
-detection but are unable to test against yellow lights since there's
-no yellow lights in the rosbag we used for testing.
+For Calar, we extract training set from one of the rosbag Udacity has
+provided and annotate the images with light. The annotated samples are
+then feed to the object detection framework and train. We've augmented
+the input by first converting them to HLS colorspace and randomly
+alter the L and S channels, then converting back to RGB. We augmented
+the training set from about 300 samples to 3000 samples.
 
 #### Shortcomings
 
-As we've mentioned, our approach is not able to tell apart whether
-there're lights or not, thus we've used FOV for detection
-assisting. FOV on the other hands, although simple, is not a stable
-way. For a better solution, we may head for other popular objection
-detection networks, such as YOLO and SSD, and use transfer learning to
-make them fitting the needs for driving Carla (both in simulator and
-real world).
+Due to the shortage of samples, the Faster-RCNN model may be good with
+Carla around the test track, but it may not generalize well in other
+environments.
+
+Even in the test site, the Faster-RCNN may occasionally identify some
+non-light objects as light. This may due to the fact that we don't
+have enough training samples, and although we've done augmentation,
+they are still interdependent.
 
 ### What problems we have encountered?  
 1. **The vehicle stopped or ran out of control after a few minutes of normal driving  (performance issues)**
