@@ -132,7 +132,7 @@ class TLDetector(object):
         image_array = np.asarray(image)
         msg = self.bridge.cv2_to_imgmsg(image_array, encoding='bgr8')
         # publish debug topic
-        self.debug_image_pub.publish(msg)
+        # self.debug_image_pub.publish(msg)
 
     def image_cb(self, msg):
         """Identifies red lights in the incoming camera image and publishes the index
