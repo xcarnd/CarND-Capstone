@@ -36,8 +36,9 @@ class WaypointUpdater(object):
         self.minimum_detect_distance = 6 + 1
         self.upcoming_traffic_light_wp_idx = -1
         self.traffic_light_state = -1     
-        self.decel_limit = abs(rospy.get_param('~decel_limit', -5))
-        self.max_num_final_waypoints = rospy.get_param('~max_num_final_waypoints', 100)
+        self.accel_limit = rospy.get_param('accel_limit', 1.)
+        self.decel_limit = abs(rospy.get_param('decel_limit', -5))
+        self.max_num_final_waypoints = rospy.get_param('max_num_final_waypoints', 100)
         self.final_waypoints = [ Waypoint() for i in range(self.max_num_final_waypoints)]
 
         rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
@@ -59,6 +60,7 @@ class WaypointUpdater(object):
         if self.locator is None or num_all_ref_waypoints == 0:
             return
 
+        # Detect distance.
         detect_distance = self.detect_second * self.current_linear_velocity
         if detect_distance < self.minimum_detect_distance:
             detect_distance = self.minimum_detect_distance 
@@ -84,16 +86,16 @@ class WaypointUpdater(object):
             # waypoint.twist.twist.linear.x = 50*1.609344 / 3.6
             waypoint.twist.twist.angular = ref_waypoint.twist.twist.angular
             i += 1
-            
+        
         waypoints = self.final_waypoints[:i]
         waypoints = self.process_traffic_lights(waypoints, idx_ahead, idx_ahead + i-1, msg.pose.position)
+        waypoints = self.smooth_start(waypoints, msg.pose.position)
 
         final_waypoints = Lane()
         final_waypoints.header.frame_id = "/world"
         final_waypoints.waypoints = waypoints
 
         self.final_waypoints_pub.publish(final_waypoints)
-        
 
     def waypoints_cb(self, waypoints):
         self.all_ref_waypoints = waypoints.waypoints
@@ -201,6 +203,31 @@ class WaypointUpdater(object):
         rospy.loginfo_throttle(0.5, "Light: %d, Target vel: %.1f m/s. Stop line: %.1f m" 
                 %(self.traffic_light_state, waypoints[0].twist.twist.linear.x, stop_line_distance))
         return waypoints
+
+    def smooth_start(self, waypoints, current_position):
+        """
+            If the car is going to accelerate, apply the soft accelerate to avoid aggressive start
+            This will not take effect if the current velocity is above 0.7 * max velocity.
+        """
+
+        v0 = self.current_linear_velocity
+        next_v = waypoints[0].twist.twist.linear.x
+        final_v = self.all_ref_waypoints[0].twist.twist.linear.x
+        factor = 1.0*v0 / final_v
+        # Only the car is going to accelerate. 
+        if v0 > next_v or factor > 0.7:
+            return waypoints
+            
+        # limit accel from 1 to 3.8 m/s^2
+        soft_accel = self.accel_limit * (1 + 4*factor)
+        for i in range(len(waypoints)):
+            target_v = waypoints[i].twist.twist.linear.x
+            dist = math.sqrt(self.pose_distance_squre(current_position, waypoints[i].pose.pose.position))
+            vt =  math.sqrt(2 * soft_accel * dist + v0**2)
+            waypoints[i].twist.twist.linear.x = min(vt, target_v)
+
+        return waypoints
+
 
 if __name__ == '__main__':
     try:
