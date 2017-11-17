@@ -47,7 +47,6 @@ class CarlaDetectionModel(object):
         return func
 
     def predict(self, image):
-        print("Start prediction")
         scores, classes = self.tf_session_run(image)
         if len(scores) == 0:
             return 0
