@@ -6,7 +6,7 @@ from keras.layers.pooling import MaxPooling2D
 from keras.models import load_model
 from keras import initializers
 
-def get_model(weights_file='detector_weights.h5'):
+def get_model(weights_file='detector_styx_weights.h5'):
     inputs = Input([224, 224, 3])
     x = Lambda(lambda x : (x / 255.0) - 0.5)(inputs)
     x = Conv2D(24, (5, 5), strides = (2, 2), activation='relu', padding='SAME')(x)

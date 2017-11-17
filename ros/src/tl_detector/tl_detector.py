@@ -56,8 +56,6 @@ class TLDetector(object):
         self.angle_to_nearest_traffic_light = None
         self.detection_started = False
 
-        self.sub_cam_info = rospy.Subscriber("/camera_info", CameraInfo, self.camera_info_cb, queue_size=1)
-
         sub1 = rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb, queue_size=1)
         sub2 = rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
 
@@ -72,18 +70,6 @@ class TLDetector(object):
         sub6 = rospy.Subscriber('/image_color', Image, self.image_cb, queue_size=1)
 
         rospy.spin()
-
-    def camera_info_cb(self, msg):
-        # calculate fov in x direction
-        # tan(fov_x/2) = (image_width / 2) / focal_length_x
-        # =>
-        # fov_x = atan(image_width / (2 * focal_length_x)) * 2
-        image_width = 1368 # this is the dimension of x of ouput from /image_raw
-        focal_length_x = msg.K[0]
-        fov_x = math.atan(image_width / (2 * focal_length_x)) * 2
-        self.fov_x = fov_x * 180 / math.pi + 5 # added a little buffer (+-2.5 degrees)
-        rospy.loginfo("FOV x (in degrees): {}".format(self.fov_x))
-        self.sub_cam_info.unregister()
 
     def pose_cb(self, msg):
         self.pose = msg
@@ -114,15 +100,15 @@ class TLDetector(object):
             debug_text_traffic_light = "Traffic light: GREEN."
             color = (0, 255, 0)
 
-        cv2.rectangle(image, (0, 0), (1024, 32 * 4 + 10), (0, 0, 0), cv2.FILLED)
+#        cv2.rectangle(image, (0, 0), (1024, 32 * 4 + 10), (0, 0, 0), cv2.FILLED)
         cv2.putText(image, debug_text_traffic_light, (16, 32),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     1, color, 2)
-        cv2.putText(image,
-                    "Detection started? {}".format(self.detection_started),
-                    (16, 32 * 2),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    1, color, 2)
+        # cv2.putText(image,
+        #             "Detection started? {}".format(self.detection_started),
+        #             (16, 32 * 2),
+        #             cv2.FONT_HERSHEY_SIMPLEX,
+        #             1, color, 2)
         if self.last_wp > -1:
             cv2.putText(image,
                         "Stop line wp loc: ({:.2f}, {:.2f}), current pose: ({:.2f}, {:.2f})".format(
@@ -179,7 +165,7 @@ class TLDetector(object):
             self.upcoming_light_pub.publish(TrafficLightState(self.last_wp, self.last_state))
         self.state_count += 1
         # for debug only
-        # self.publish_debug_image()
+        self.publish_debug_image()
 
     def get_closest_waypoint(self, pose):
         """Identifies the closest path waypoint to the given position
@@ -251,6 +237,8 @@ class TLDetector(object):
             else:
                 state = self.get_light_state(light)
                 # rospy.loginfo("Detected traffic light state: {}, nearest waypoint index: {}".format(state, wp_idx))
+            if state == TrafficLight.UNKNOWN:
+                wp_idx = -1
             return wp_idx, state
         return -1, TrafficLight.UNKNOWN
 
